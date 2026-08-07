@@ -1,0 +1,5 @@
+framework:
+    lock:
+        resources:
+            default:
+                - doctrine.dbal.default_connection

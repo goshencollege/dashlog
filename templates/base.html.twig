@@ -1,24 +1,490 @@
+{% set _theme = current_theme() %}
+{% set _bsTheme = _theme in ['dark', 'purple', 'green', 'rainbow'] ? 'dark' : 'light' %}
 <!DOCTYPE html>
-<html>
-    <head>
-        <meta charset="UTF-8">
-        <title>{% block title %}Welcome!{% endblock %}</title>
-        <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 128 128%22><text y=%221.2em%22 font-size=%2296%22>⚫️</text><text y=%221.3em%22 x=%220.2em%22 font-size=%2276%22 fill=%22%23fff%22>sf</text></svg>">
-        {% block stylesheets %}
-        {% endblock %}
+<html lang="en" data-bs-theme="{{ _bsTheme }}" data-theme="{{ _theme }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}DashLog{% endblock %} – Syslog Collector, Viewer &amp; Analyzer</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        html { scroll-padding-top: 80px; }
+        .col-lg-3 .sticky-top { z-index: 1; }
+        .container-fluid { max-width: 90%; }
+        .navbar-brand { font-weight: 600; letter-spacing: .5px; }
+        .table-hover tbody tr:hover { background-color: rgba(13,110,253,.05); }
+        thead, .table-section-header { background-color: var(--bs-tertiary-bg); }
+        .theme-swatch {
+            display: inline-block; width: 13px; height: 13px;
+            border-radius: 50%; flex-shrink: 0;
+            border: 1px solid rgba(255,255,255,.25);
+        }
 
-        {% block javascripts %}
-            {% block importmap %}{{ importmap('app') }}{% endblock %}
-        {% endblock %}
+        /* ── Severity badge colors ──────────────────────────────── */
+        .badge-orange-subtle {
+            background-color: #fff4e6; color: #c2410c;
+            border: 1px solid #ffc078;
+        }
+        .badge-purple-subtle {
+            background-color: #f9f0ff; color: #6b21a8;
+            border: 1px solid #d8b4fe;
+        }
+        [data-bs-theme="dark"] .badge-orange-subtle {
+            background-color: #3a1500; color: #fb923c;
+            border-color: #9a3412;
+        }
+        [data-bs-theme="dark"] .badge-purple-subtle {
+            background-color: #2e1065; color: #d8b4fe;
+            border-color: #7e22ce;
+        }
 
-        {% set frankenphp_hot_reload = app.request.server.get('FRANKENPHP_HOT_RELOAD') %}
-        {% if frankenphp_hot_reload %}
-        <meta name="frankenphp-hot-reload:url" content="{{ frankenphp_hot_reload }}">
-        <script src="https://cdn.jsdelivr.net/npm/idiomorph"></script>
-        <script src="https://cdn.jsdelivr.net/npm/frankenphp-hot-reload/+esm" type="module"></script>
-        {% endif %}
-    </head>
-    <body>
-        {% block body %}{% endblock %}
-    </body>
+        /* ── Purple theme ───────────────────────────────────────── */
+        [data-theme="purple"] .navbar {
+            background-color: #3b0764 !important;
+        }
+        [data-theme="purple"] thead, [data-theme="purple"] .table-section-header {
+            background-color: #4c1d95 !important;
+        }
+        [data-theme="purple"] {
+            --bs-primary:                #9333ea;
+            --bs-primary-rgb:            147, 51, 234;
+            --bs-link-color:             #c084fc;
+            --bs-link-color-rgb:         192, 132, 252;
+            --bs-link-hover-color:       #d8b4fe;
+        }
+        [data-theme="purple"] .btn-primary {
+            --bs-btn-bg:                 #7c3aed;
+            --bs-btn-border-color:       #7c3aed;
+            --bs-btn-hover-bg:           #6d28d9;
+            --bs-btn-hover-border-color: #6d28d9;
+            --bs-btn-active-bg:          #5b21b6;
+        }
+        [data-theme="purple"] .btn-outline-primary {
+            --bs-btn-color:              #c084fc;
+            --bs-btn-border-color:       #c084fc;
+            --bs-btn-hover-bg:           #7c3aed;
+            --bs-btn-hover-border-color: #7c3aed;
+            --bs-btn-hover-color:        #fff;
+        }
+        [data-theme="purple"] .bg-primary       { background-color: #7c3aed !important; }
+        [data-theme="purple"] .text-primary      { color: #c084fc !important; }
+        [data-theme="purple"] .nav-link.active   { color: #c084fc !important; }
+        [data-theme="purple"] .form-control:focus,
+        [data-theme="purple"] .form-select:focus {
+            border-color: #a855f7;
+            box-shadow: 0 0 0 .25rem rgba(168,85,247,.25);
+        }
+        [data-theme="purple"] .table-hover tbody tr:hover {
+            background-color: rgba(147,51,234,.12);
+        }
+
+        /* ── Green theme ────────────────────────────────────────── */
+        [data-theme="green"] .navbar {
+            background-color: #064e3b !important;
+        }
+        [data-theme="green"] thead, [data-theme="green"] .table-section-header {
+            background-color: #065f46 !important;
+        }
+        [data-theme="green"] {
+            --bs-primary:                #059669;
+            --bs-primary-rgb:            5, 150, 105;
+            --bs-link-color:             #34d399;
+            --bs-link-color-rgb:         52, 211, 153;
+            --bs-link-hover-color:       #6ee7b7;
+        }
+        [data-theme="green"] .btn-primary {
+            --bs-btn-bg:                 #059669;
+            --bs-btn-border-color:       #059669;
+            --bs-btn-hover-bg:           #047857;
+            --bs-btn-hover-border-color: #047857;
+            --bs-btn-active-bg:          #065f46;
+        }
+        [data-theme="green"] .btn-outline-primary {
+            --bs-btn-color:              #34d399;
+            --bs-btn-border-color:       #34d399;
+            --bs-btn-hover-bg:           #059669;
+            --bs-btn-hover-border-color: #059669;
+            --bs-btn-hover-color:        #fff;
+        }
+        [data-theme="green"] .bg-primary       { background-color: #059669 !important; }
+        [data-theme="green"] .text-primary      { color: #34d399 !important; }
+        [data-theme="green"] .nav-link.active   { color: #34d399 !important; }
+        [data-theme="green"] .form-control:focus,
+        [data-theme="green"] .form-select:focus {
+            border-color: #10b981;
+            box-shadow: 0 0 0 .25rem rgba(16,185,129,.25);
+        }
+        [data-theme="green"] .table-hover tbody tr:hover {
+            background-color: rgba(5,150,105,.12);
+        }
+
+        /* ── Rainbow theme ──────────────────────────────────────── */
+        @keyframes rainbow-swirl {
+            0%   { background-position: 0% 0%; }
+            25%  { background-position: 100% 0%; }
+            50%  { background-position: 100% 100%; }
+            75%  { background-position: 0% 100%; }
+            100% { background-position: 0% 0%; }
+        }
+        [data-theme="rainbow"] html {
+            background: radial-gradient(ellipse at 20% 20%, #ff0055 0%, #ff8800 16%, #ffff00 32%, #00ff88 48%, #0088ff 64%, #8800ff 80%, #ff0055 100%),
+                        radial-gradient(ellipse at 80% 80%, #ff00cc 0%, #ffff00 25%, #00ffcc 50%, #0044ff 75%, #ff0055 100%);
+            background-size: 300% 300%, 300% 300%;
+            background-blend-mode: screen;
+            animation: rainbow-swirl 8s ease infinite;
+            min-height: 100%;
+        }
+        [data-theme="rainbow"] body {
+            background: transparent !important;
+        }
+        [data-theme="rainbow"] .navbar {
+            background: linear-gradient(90deg, #ff0055, #ff8800, #ffff00, #00ff88, #0088ff, #8800ff, #ff0055) !important;
+            background-size: 200% 100% !important;
+            animation: rainbow-swirl 5s linear infinite;
+            box-shadow: 0 3px 25px rgba(255,255,255,.3) !important;
+        }
+        [data-theme="rainbow"] .navbar-brand,
+        [data-theme="rainbow"] .navbar .nav-link,
+        [data-theme="rainbow"] .navbar .btn {
+            color: #fff !important;
+            text-shadow: 0 1px 4px rgba(0,0,0,.8);
+        }
+        [data-theme="rainbow"] .container {
+            background: rgba(10,10,20,.72);
+            border-radius: .75rem;
+            padding: 1.5rem;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 30px rgba(0,0,0,.4);
+        }
+        [data-theme="rainbow"] thead, [data-theme="rainbow"] .table-section-header {
+            background: linear-gradient(90deg, #ff0055, #ff8800, #ffff00, #00ff88, #0088ff, #8800ff) !important;
+        }
+        [data-theme="rainbow"] thead th, [data-theme="rainbow"] thead td,
+        [data-theme="rainbow"] .table-section-header th, [data-theme="rainbow"] .table-section-header td {
+            color: #fff !important;
+            text-shadow: 0 1px 4px rgba(0,0,0,.8);
+        }
+        [data-theme="rainbow"] {
+            --bs-primary:                #ff88cc;
+            --bs-primary-rgb:            255, 136, 204;
+            --bs-link-color:             #88ffee;
+            --bs-link-color-rgb:         136, 255, 238;
+            --bs-link-hover-color:       #ffff88;
+        }
+        [data-theme="rainbow"] .btn-primary {
+            background: linear-gradient(135deg, #ff0055, #ff8800, #ffff00) !important;
+            border-color: transparent !important;
+            color: #fff !important;
+            text-shadow: 0 1px 3px rgba(0,0,0,.6);
+            box-shadow: 0 0 14px rgba(255,100,100,.5);
+        }
+        [data-theme="rainbow"] .btn-primary:hover {
+            background: linear-gradient(135deg, #00ff88, #0088ff, #8800ff) !important;
+            box-shadow: 0 0 18px rgba(100,100,255,.6);
+        }
+        [data-theme="rainbow"] .nav-link.active {
+            color: #ffff00 !important;
+            text-shadow: 0 0 8px #fff;
+        }
+        [data-theme="rainbow"] .form-control:focus,
+        [data-theme="rainbow"] .form-select:focus {
+            border-color: #ff88cc;
+            box-shadow: 0 0 0 .25rem rgba(255,136,204,.35), 0 0 12px rgba(255,100,255,.3);
+        }
+        [data-theme="rainbow"] .table-hover tbody tr:hover {
+            background-color: rgba(255,255,255,.07);
+        }
+        [data-theme="rainbow"] h1, [data-theme="rainbow"] h2,
+        [data-theme="rainbow"] h3, [data-theme="rainbow"] h4 {
+            background: linear-gradient(90deg, #ff8888, #ffcc44, #88ff88, #44ccff, #cc88ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* ── Full-height paginated list layout ─────────────────────── */
+        body.page-list-view {
+            height: 100dvh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        body.page-list-view > .container-fluid {
+            flex: 1 1 0;
+            min-height: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 0 !important;
+            padding-bottom: .75rem;
+        }
+        body.page-list-view > footer { flex-shrink: 0; }
+
+        .sticky-list-header {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background-color: var(--bs-body-bg);
+            padding-bottom: .25rem;
+        }
+
+        .list-page-content {
+            flex: 1 1 0;
+            min-height: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .list-page-content > * { flex-shrink: 0; }
+
+        .list-scroll-card {
+            flex: 1 1 0;
+            min-height: 0;
+            overflow: hidden;
+        }
+        .list-scroll-card > .card {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .list-scroll-card > .card > .card-header,
+        .list-scroll-card > .card > .card-footer,
+        .list-scroll-card > .card > .card-body { flex-shrink: 0; }
+        .list-scroll-card > .card > .table-responsive,
+        .list-scroll-card > .card > .table-scroll-wrapper {
+            flex: 1 1 0;
+            min-height: 0;
+            overflow-y: auto;
+        }
+    </style>
+    {% block stylesheets %}{% endblock %}
+    {% block page_styles %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}">
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4 sticky-top">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="{{ path('dashboard') }}">
+            <i class="bi bi-clipboard-data-fill me-2"></i>DashLog
+        </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navMenu">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navMenu">
+            <ul class="navbar-nav me-auto">
+                {% set settingsActive = app.request.attributes.get('_route') starts with 'saml_provider' %}
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle {{ settingsActive ? 'active' }}" href="#" data-bs-toggle="dropdown">
+                        <i class="bi bi-gear me-1"></i>Other Settings
+                    </a>
+                    <ul class="dropdown-menu">
+                        <li>
+                            <a class="dropdown-item {{ app.request.attributes.get('_route') starts with 'saml_provider' ? 'active' }}"
+                               href="{{ path('saml_provider_index') }}">
+                                <i class="bi bi-shield-lock me-1"></i>SAML Providers
+                            </a>
+                        </li>
+                    </ul>
+                </li>
+            </ul>
+            {% if app.user %}
+            <ul class="navbar-nav ms-auto align-items-center">
+                <li class="nav-item dropdown me-2">
+                    <button class="btn btn-sm btn-outline-light dropdown-toggle" data-bs-toggle="dropdown"
+                            aria-expanded="false" title="Change theme" id="theme-picker">
+                        <i class="bi bi-palette2"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><h6 class="dropdown-header">Theme</h6></li>
+                        <li>
+                            <button class="dropdown-item d-flex align-items-center gap-2 theme-option {{ _theme == 'light' ? 'active' }}" data-theme="light">
+                                <span class="theme-swatch" style="background:#f8f9fa; border-color:#ced4da;"></span>
+                                Light
+                                {% if _theme == 'light' %}<i class="bi bi-check ms-auto"></i>{% endif %}
+                            </button>
+                        </li>
+                        <li>
+                            <button class="dropdown-item d-flex align-items-center gap-2 theme-option {{ _theme == 'dark' ? 'active' }}" data-theme="dark">
+                                <span class="theme-swatch" style="background:#212529;"></span>
+                                Dark
+                                {% if _theme == 'dark' %}<i class="bi bi-check ms-auto"></i>{% endif %}
+                            </button>
+                        </li>
+                        <li>
+                            <button class="dropdown-item d-flex align-items-center gap-2 theme-option {{ _theme == 'purple' ? 'active' }}" data-theme="purple">
+                                <span class="theme-swatch" style="background:#7c3aed;"></span>
+                                Purple
+                                {% if _theme == 'purple' %}<i class="bi bi-check ms-auto"></i>{% endif %}
+                            </button>
+                        </li>
+                        <li>
+                            <button class="dropdown-item d-flex align-items-center gap-2 theme-option {{ _theme == 'green' ? 'active' }}" data-theme="green">
+                                <span class="theme-swatch" style="background:#059669;"></span>
+                                Green
+                                {% if _theme == 'green' %}<i class="bi bi-check ms-auto"></i>{% endif %}
+                            </button>
+                        </li>
+                        <li>
+                            <button class="dropdown-item d-flex align-items-center gap-2 theme-option {{ _theme == 'rainbow' ? 'active' }}" data-theme="rainbow">
+                                <span class="theme-swatch" style="background: linear-gradient(135deg,#ff0055,#ff8800,#ffff00,#00ff88,#0088ff,#8800ff); border-color:transparent;"></span>
+                                Rainbow
+                                {% if _theme == 'rainbow' %}<i class="bi bi-check ms-auto"></i>{% endif %}
+                            </button>
+                        </li>
+                    </ul>
+                </li>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+                        <i class="bi bi-person-circle me-1"></i>{{ app.user.displayName }}
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><span class="dropdown-item-text text-muted small">{{ app.user.email }}</span></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#aboutModal">
+                                <i class="bi bi-info-circle me-1"></i>About
+                            </button>
+                        </li>
+                        <li>
+                            <a href="{{ path('saml_logout') }}" class="dropdown-item">
+                                <i class="bi bi-box-arrow-right me-1"></i>Logout
+                            </a>
+                        </li>
+                    </ul>
+                </li>
+            </ul>
+            {% endif %}
+        </div>
+    </div>
+</nav>
+
+<div class="toast-container position-fixed bottom-0 end-0 p-3" id="quick-action-toasts" style="z-index:1100"></div>
+
+<div class="{% block container_class %}container-fluid{% endblock %} mb-5">
+    {% for label, messages in app.flashes %}
+        {% for message in messages %}
+            <div class="alert alert-{{ label == 'success' ? 'success' : 'danger' }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        {% endfor %}
+    {% endfor %}
+
+    {% block content %}{% endblock %}
+</div>
+
+<div class="modal fade" id="aboutModal" tabindex="-1" aria-labelledby="aboutModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="aboutModalLabel"><i class="bi bi-clipboard-data-fill me-2"></i>DashLog</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-1">Syslog Collector, Viewer &amp; Analyzer</p>
+                <hr>
+                <p class="mb-1">Copyright &copy; 2026 <a href="https://github.com/davidwkdavidwk" target="_blank">David King</a> and <a href="https://goshen.edu" target="_blank">Goshen College</a>.</p>
+                <p class="mb-0 small text-muted">Released under the <a href="https://www.gnu.org/licenses/agpl-3.0.html" target="_blank">GNU Affero General Public License v3.0</a>.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+(function () {
+    const darkBased = ['dark', 'purple', 'green', 'rainbow'];
+
+    document.querySelectorAll('.theme-option').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            const theme   = this.dataset.theme;
+            const bsTheme = darkBased.includes(theme) ? 'dark' : 'light';
+            const html    = document.documentElement;
+
+            html.setAttribute('data-bs-theme', bsTheme);
+            html.setAttribute('data-theme',    theme);
+
+            document.querySelectorAll('.theme-option').forEach(function (b) {
+                const icon = b.querySelector('.bi-check');
+                if (icon) icon.remove();
+                b.classList.remove('active');
+            });
+            const check = document.createElement('i');
+            check.className = 'bi bi-check ms-auto';
+            this.appendChild(check);
+            this.classList.add('active');
+
+            fetch('{{ path('api_preference_theme') }}', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ theme: theme }),
+            });
+        });
+    });
+})();
+</script>
+{% if app.user %}
+<script>
+(function () {
+    var expiresAt    = {{ app.session.get('_session_expires_at') ?? 'null' }};
+    var lifetime     = {{ app.session.get('_session_lifetime') ?? 1800 }};
+    if (expiresAt) {
+        // Fire 10% of the session lifetime AFTER the server-side expiry so the
+        // subscriber has already invalidated the session when the redirect lands.
+        var delay = (expiresAt * 1000 + lifetime * 100) - Date.now();
+        if (delay > 0) {
+            setTimeout(function () { window.location.href = '{{ path('saml_login') }}'; }, delay);
+        } else {
+            window.location.href = '{{ path('saml_login') }}';
+        }
+    }
+})();
+</script>
+{% endif %}
+{% block scripts %}{% endblock %}
+{% if app.user %}
+<script>
+(function () {
+    function showToast(message, type) {
+        var container = document.getElementById('quick-action-toasts');
+        var id = 'qa-toast-' + Date.now();
+        var bg = type === 'error' ? 'text-bg-danger' : 'text-bg-success';
+        container.insertAdjacentHTML('beforeend',
+            '<div id="' + id + '" class="toast align-items-center ' + bg + ' border-0" role="alert" aria-live="assertive">' +
+            '<div class="d-flex"><div class="toast-body">' + message + '</div>' +
+            '<button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div></div>');
+        var el = document.getElementById(id);
+        var toast = new bootstrap.Toast(el, { delay: 5000 });
+        toast.show();
+        el.addEventListener('hidden.bs.toast', function () { el.remove(); });
+    }
+
+    document.querySelectorAll('.quick-action-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var endpoint = this.dataset.endpoint;
+            var successMsg = this.dataset.success;
+            btn.disabled = true;
+            fetch(endpoint, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': btn.dataset.csrfToken } })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (data.error) {
+                        showToast('<i class="bi bi-exclamation-triangle-fill me-2"></i>' + data.error, 'error');
+                    } else {
+                        showToast('<i class="bi bi-check-circle-fill me-2"></i>' + successMsg, 'success');
+                    }
+                })
+                .catch(function (err) {
+                    showToast('<i class="bi bi-exclamation-triangle-fill me-2"></i>Request failed: ' + err, 'error');
+                })
+                .finally(function () { btn.disabled = false; });
+        });
+    });
+})();
+</script>
+{% endif %}
+</body>
 </html>

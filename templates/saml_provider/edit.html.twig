@@ -1,0 +1,109 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}{{ is_new ? 'Add SAML Provider' : 'Edit ' ~ provider.name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>
+        <i class="bi bi-shield-lock me-2"></i>
+        {{ is_new ? 'Add SAML Provider' : 'Edit ' ~ provider.name }}
+    </h1>
+    <a href="{{ path('saml_provider_index') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Back
+    </a>
+</div>
+
+{{ form_start(form, {attr: {novalidate: 'novalidate'}}) }}
+<div class="row g-4">
+
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header"><strong>Provider</strong></div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-lg-4">
+                        {{ form_label(form.name, null, {label_attr: {class: 'form-label fw-semibold'}}) }}
+                        {{ form_widget(form.name, {attr: {class: 'form-control'}}) }}
+                        {{ form_errors(form.name) }}
+                        {{ form_help(form.name) }}
+                    </div>
+                    <div class="col-lg-2">
+                        {{ form_label(form.sessionLifetimeMinutes, null, {label_attr: {class: 'form-label fw-semibold'}}) }}
+                        {{ form_widget(form.sessionLifetimeMinutes, {attr: {class: 'form-control'}}) }}
+                        {{ form_errors(form.sessionLifetimeMinutes) }}
+                        {{ form_help(form.sessionLifetimeMinutes) }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header"><strong>Service Provider (SP) — This Application</strong></div>
+            <div class="card-body">
+                <div class="mb-3">
+                    {{ form_label(form.spEntityId, null, {label_attr: {class: 'form-label fw-semibold'}}) }}
+                    {{ form_widget(form.spEntityId, {attr: {class: 'form-control font-monospace'}}) }}
+                    {{ form_errors(form.spEntityId) }}
+                </div>
+                <div class="mb-3">
+                    {{ form_label(form.spAcsUrl, null, {label_attr: {class: 'form-label fw-semibold'}}) }}
+                    {{ form_widget(form.spAcsUrl, {attr: {class: 'form-control font-monospace'}}) }}
+                    {{ form_errors(form.spAcsUrl) }}
+                </div>
+                <div class="mb-3">
+                    {{ form_label(form.spSloUrl, null, {label_attr: {class: 'form-label fw-semibold'}}) }}
+                    {{ form_widget(form.spSloUrl, {attr: {class: 'form-control font-monospace'}}) }}
+                    {{ form_errors(form.spSloUrl) }}
+                </div>
+                <div class="mb-3">
+                    {{ form_label(form.spCert, null, {label_attr: {class: 'form-label fw-semibold'}}) }}
+                    {{ form_widget(form.spCert, {attr: {class: 'form-control font-monospace'}}) }}
+                    {{ form_errors(form.spCert) }}
+                    {{ form_help(form.spCert) }}
+                </div>
+                <div class="mb-0">
+                    {{ form_label(form.spPrivateKey, null, {label_attr: {class: 'form-label fw-semibold'}}) }}
+                    {{ form_widget(form.spPrivateKey, {attr: {class: 'form-control font-monospace'}}) }}
+                    {{ form_errors(form.spPrivateKey) }}
+                    {{ form_help(form.spPrivateKey) }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header"><strong>Identity Provider (IdP) — External</strong></div>
+            <div class="card-body">
+                <div class="mb-3">
+                    {{ form_label(form.idpEntityId, null, {label_attr: {class: 'form-label fw-semibold'}}) }}
+                    {{ form_widget(form.idpEntityId, {attr: {class: 'form-control font-monospace'}}) }}
+                    {{ form_errors(form.idpEntityId) }}
+                </div>
+                <div class="mb-3">
+                    {{ form_label(form.idpSsoUrl, null, {label_attr: {class: 'form-label fw-semibold'}}) }}
+                    {{ form_widget(form.idpSsoUrl, {attr: {class: 'form-control font-monospace'}}) }}
+                    {{ form_errors(form.idpSsoUrl) }}
+                </div>
+                <div class="mb-0">
+                    {{ form_label(form.idpCert, null, {label_attr: {class: 'form-label fw-semibold'}}) }}
+                    {{ form_widget(form.idpCert, {attr: {class: 'form-control font-monospace'}}) }}
+                    {{ form_errors(form.idpCert) }}
+                    {{ form_help(form.idpCert) }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<div class="mt-4 d-flex gap-2">
+    <button type="submit" class="btn btn-primary">
+        <i class="bi bi-check-lg me-1"></i>{{ is_new ? 'Create Provider' : 'Save Changes' }}
+    </button>
+    <a href="{{ path('saml_provider_index') }}" class="btn btn-outline-secondary">Cancel</a>
+</div>
+{{ form_end(form) }}
+{% endblock %}

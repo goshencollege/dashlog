@@ -1,43 +1,145 @@
 # DashLog
 
-A syslog collector, viewer, and analyzer, built with [Symfony](https://symfony.com) and running on [FrankenPHP](https://frankenphp.dev)/[Caddy](https://caddyserver.com) via Docker Compose.
+DashLog is a syslog collector, viewer, and analyzer — with SAML-based authentication and a themeable web UI.
 
-## Stack
+## Features
 
-- **App**: Symfony 8.1 (webapp edition — Twig, Forms, Security, Doctrine ORM, Messenger, Mailer)
-- **Database**: PostgreSQL 16
-- **Web/App server**: FrankenPHP (Caddy), automatic HTTPS in dev and prod
-- **Dev mail catcher**: Mailpit
+- **SAML Authentication** — Configurable SAML 2.0 identity provider integration; provider config lives in the database and can be imported from IdP metadata
+- **Themeable UI** — Light, dark, purple, green, and rainbow themes, saved per-user
 
-## Getting Started
+## Tech Stack
 
-1. Install [Docker Compose](https://docs.docker.com/compose/install/) (v2.10+)
-2. Build the images:
+- **PHP 8.3** / **Symfony 7.4**
+- **MySQL 8.0**
+- **Nginx** (reverse proxy with SSL/TLS)
+- **Docker & Docker Compose**
+- **Symfony Messenger** (async message queue / worker)
 
-   ```console
-   docker compose build
-   ```
+## Deployment
 
-3. Start the stack:
+### Prerequisites
 
-   ```console
-   docker compose up -d --wait
-   ```
+- Docker and Docker Compose
+- `openssl` (for generating secrets and self-signed certificates)
 
-4. Open <https://localhost> and accept the auto-generated dev TLS certificate.
-5. Mailpit (dev mail catcher) is available at <http://localhost:8025>.
-6. Stop everything with:
+### Quick Start
 
-   ```console
-   docker compose down
-   ```
+Clone the repository and run the setup script:
 
-## Running console commands
-
-```console
-docker compose exec php bin/console <command>
+```bash
+git clone <repo-url> dashlog
+cd dashlog
+./setup.sh
 ```
 
-## Docker template
+The setup script is an interactive wizard that will:
 
-The container setup is based on [dunglas/symfony-docker](https://github.com/dunglas/symfony-docker). See `docs/` for details on options, production deployment, Xdebug, extra services, and troubleshooting.
+1. Generate `APP_SECRET` and `APP_ENCRYPTION_KEY`
+2. Prompt for your hostname/FQDN and build the base URL
+3. Configure SSL — self-signed certificate, Let's Encrypt via certbot, or a user-provided certificate
+4. Configure the database — container-managed MySQL with auto-generated credentials, or an external MySQL server
+5. Generate `docker-compose.dev.yml` or `docker-compose.prod.yml` with all configured values
+6. Build and start the containers
+7. Run database migrations
+8. Warm the Symfony cache
+9. Optionally import SAML IdP metadata to enable authentication
+
+### Starting and Stopping
+
+After initial setup, use the generated compose file:
+
+```bash
+# Start
+docker compose -f docker-compose.dev.yml up -d
+
+# Stop
+docker compose -f docker-compose.dev.yml down
+
+# View logs
+docker compose -f docker-compose.dev.yml logs -f
+```
+
+### Containers
+
+| Service  | Description                                     |
+|----------|--------------------------------------------------|
+| `app`    | PHP 8.3-FPM application                          |
+| `worker` | Messenger consumer for async jobs                 |
+| `nginx`  | Nginx reverse proxy (HTTP/HTTPS)                  |
+| `db`     | MySQL 8.0 database                                |
+
+### Running Console Commands
+
+All Symfony console commands must be run inside the `app` container:
+
+```bash
+docker compose exec app bin/console <command>
+```
+
+Common commands:
+
+```bash
+# Run database migrations
+docker compose exec app bin/console doctrine:migrations:migrate
+
+# Warm the cache
+docker compose exec app bin/console cache:warmup
+
+# Import SAML IdP metadata from a URL or file
+docker compose exec app bin/console app:saml:import-metadata <file-or-url> --activate
+
+# Generate a new APP_ENCRYPTION_KEY
+docker compose exec app bin/console app:generate-encryption-key
+```
+
+### Environment Variables
+
+Key variables written to the generated compose file by `setup.sh`:
+
+| Variable                  | Description                                              |
+|----------------------------|------------------------------------------------------------|
+| `APP_ENV`                  | `prod` or `dev`                                            |
+| `APP_SECRET`                | Symfony application secret (auto-generated)                |
+| `APP_ENCRYPTION_KEY`        | Base64-encoded key for encrypting SAML SP private keys     |
+| `DATABASE_URL`              | MySQL DSN (`mysql://user:pass@host:3306/dbname`)           |
+| `DEFAULT_URI`                | Base URL of the application (e.g. `https://dashlog.example.com`) |
+| `MESSENGER_TRANSPORT_DSN`    | Doctrine-backed async message queue DSN                    |
+
+### Updating
+
+```bash
+git pull
+docker compose -f docker-compose.dev.yml build app worker
+docker compose -f docker-compose.dev.yml up -d
+docker compose exec app bin/console doctrine:migrations:migrate
+docker compose exec app bin/console cache:warmup
+```
+
+## Development
+
+### Dev stack
+
+A `docker-compose.dev.yml` is generated by `setup.sh`. A `Makefile` wraps the most common operations:
+
+```bash
+make up          # start containers
+make down        # stop containers
+make bash        # shell into the app container
+make migrate     # run Doctrine migrations
+make cc          # clear Symfony cache
+make logs        # tail all container logs
+make reset       # wipe volumes, rebuild, migrate, load fixtures (full reset)
+```
+
+PHP is only available inside the containers — never run `php` or `bin/console` directly on the host.
+
+### Testing
+
+```bash
+make test-setup  # first-time only: create dashlog_test DB, run migrations
+make test        # run the test suite
+```
+
+## License
+
+[AGPL-3.0-or-later](LICENSE)

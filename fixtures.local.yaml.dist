@@ -1,0 +1,13 @@
+# Copy this file to fixtures.local.yaml and fill in your site-specific values.
+# fixtures.local.yaml is gitignored — it will not be committed.
+# When present, doctrine:fixtures:load uses these values instead of the generic defaults.
+
+saml_providers:
+  - name: "My Organization"
+    is_active: true
+    sp_entity_id: "https://dashlog.example.com/saml/metadata"
+    sp_acs_url: "https://dashlog.example.com/saml/acs"
+    sp_slo_url: "https://dashlog.example.com/saml/logout"
+    idp_entity_id: "https://idp.example.com/saml2/idp/metadata.php"
+    idp_sso_url: "https://idp.example.com/saml2/idp/SSOService.php"
+    idp_cert: "MIID..."   # base64 X.509 cert, no PEM headers

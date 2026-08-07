@@ -1,9 +1,24 @@
+# IDE
+.idea/
+.vscode/
+
+# Local fixture overrides — copy fixtures.local.yaml.dist and fill in site-specific values
+/fixtures.local.yaml
+
+# TLS certificates — generate with: make cert
+/docker/ssl/*.pem
+/docker/ssl/*.crt
+/docker/ssl/*.key
 
 ###> symfony/framework-bundle ###
+/.env.dev
+/docker-compose.dev.yml
+/docker-compose.prod.yml
 /.env.local
 /.env.local.php
 /.env.*.local
 /config/secrets/prod/prod.decrypt.private.php
+/config/reference.php
 /public/bundles/
 /var/
 /vendor/
@@ -12,9 +27,5 @@
 ###> phpunit/phpunit ###
 /phpunit.xml
 /.phpunit.cache/
+/.phpunit.result.cache
 ###< phpunit/phpunit ###
-
-###> symfony/asset-mapper ###
-/public/assets/
-/assets/vendor/
-###< symfony/asset-mapper ###

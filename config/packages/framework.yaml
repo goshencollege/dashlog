@@ -3,10 +3,17 @@ framework:
     secret: '%env(APP_SECRET)%'
 
     # Note that the session will be started ONLY if you read or write from it.
-    session: true
+    session:
+        handler_id: Symfony\Component\HttpFoundation\Session\Storage\Handler\PdoSessionHandler
+        name: DASHLOGSESS
 
     #esi: true
     #fragments: true
+
+when@dev:
+    framework:
+        session:
+            name: DASHLOGSESS_dev
 
 when@test:
     framework:

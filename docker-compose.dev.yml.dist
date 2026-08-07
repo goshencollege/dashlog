@@ -1,0 +1,121 @@
+name: replace_with_compose_project
+
+x-worker-base: &worker-base
+  build:
+    context: .
+    target: base
+  volumes:
+    - .:/var/www/html
+    - symfony_var:/var/www/html/var
+  tmpfs:
+    - /tmp
+    - /usr/local/var/run
+  environment:
+    APP_ENV: dev
+    APP_SECRET: "replace_with_32plus_char_secret"
+    APP_ENCRYPTION_KEY: "run: docker compose exec app php bin/console app:generate-encryption-key"
+    DEFAULT_URI: "https://your-dev-hostname.example.com"
+    DATABASE_URL: "mysql://dash:dash_password@db:3306/dashlog?serverVersion=8.0&charset=utf8mb4"
+    MESSENGER_TRANSPORT_DSN: "doctrine://default"
+  depends_on:
+    db:
+      condition: service_healthy
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "20m"
+      max-file: "5"
+
+services:
+  app:
+    build:
+      context: .
+      target: base
+    volumes:
+      - .:/var/www/html
+      - symfony_var:/var/www/html/var
+    tmpfs:
+      - /tmp
+      - /usr/local/var/run
+    environment:
+      APP_ENV: dev
+      APP_SECRET: "replace_with_32plus_char_secret"
+      APP_ENCRYPTION_KEY: "run: docker compose exec app php bin/console app:generate-encryption-key"
+      DEFAULT_URI: "https://your-dev-hostname.example.com"
+      DATABASE_URL: "mysql://dash:dash_password@db:3306/dashlog?serverVersion=8.0&charset=utf8mb4"
+      MESSENGER_TRANSPORT_DSN: "doctrine://default"
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 9000"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    depends_on:
+      db:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # Handles async jobs (e.g. log ingestion, scheduled analysis) and their failed-message retries.
+  worker:
+    <<: *worker-base
+    command: ["php", "bin/console", "messenger:consume", "async", "failed", "--time-limit=3600"]
+
+  nginx:
+    image: nginx:alpine
+    read_only: true
+    ports:
+      - "8080:80"
+      - "8443:443"
+    volumes:
+      - .:/var/www/html:ro
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+      - ssl_certs:/etc/nginx/ssl:ro
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  db:
+    image: mysql:8.0
+    read_only: true
+    environment:
+      MYSQL_DATABASE: dashlog
+      MYSQL_USER: dash
+      MYSQL_PASSWORD: dash_password
+      MYSQL_ROOT_PASSWORD: root_password
+    volumes:
+      - mysql_data:/var/lib/mysql
+    tmpfs:
+      - /var/run/mysqld
+      - /tmp
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "dash", "-pdash_password"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "3306:3306"
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+volumes:
+  ssl_certs:
+  mysql_data:
+  symfony_var:

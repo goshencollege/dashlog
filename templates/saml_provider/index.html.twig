@@ -1,0 +1,84 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}SAML Providers{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="bi bi-shield-lock me-2"></i>SAML Providers</h1>
+    <a href="{{ path('saml_provider_new') }}" class="btn btn-primary">
+        <i class="bi bi-plus-lg me-1"></i>Add Provider
+    </a>
+</div>
+
+{% if providers is empty %}
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle me-2"></i>
+        No SAML providers configured. SAML login will not work until at least one provider is added and activated.
+    </div>
+{% else %}
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>IdP Entity ID</th>
+                        <th>SP ACS URL</th>
+                        <th>Status</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for provider in providers %}
+                    <tr>
+                        <td class="align-middle fw-semibold">{{ provider.name }}</td>
+                        <td class="align-middle text-muted small font-monospace">{{ provider.idpEntityId }}</td>
+                        <td class="align-middle text-muted small font-monospace">{{ provider.spAcsUrl }}</td>
+                        <td class="align-middle">
+                            {% if provider.isActive %}
+                                <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Active</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td class="align-middle text-end">
+                            <div class="d-flex gap-2 justify-content-end">
+                                {% if not provider.isActive %}
+                                <form method="post" action="{{ path('saml_provider_activate', {id: provider.id}) }}">
+                                    <input type="hidden" name="_token" value="{{ csrf_token('activate' ~ provider.id) }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-success"
+                                            onclick="return confirm('Set {{ provider.name|e('js') }} as the active SAML provider?')">
+                                        <i class="bi bi-check-circle me-1"></i>Activate
+                                    </button>
+                                </form>
+                                {% endif %}
+                                <a href="{{ path('saml_provider_edit', {id: provider.id}) }}"
+                                   class="btn btn-sm btn-outline-secondary">
+                                    <i class="bi bi-pencil me-1"></i>Edit
+                                </a>
+                                {% if not provider.isActive %}
+                                <form method="post" action="{{ path('saml_provider_delete', {id: provider.id}) }}">
+                                    <input type="hidden" name="_token" value="{{ csrf_token('delete' ~ provider.id) }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger"
+                                            onclick="return confirm('Delete {{ provider.name|e('js') }}? This cannot be undone.')">
+                                        <i class="bi bi-trash me-1"></i>Delete
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% endif %}
+
+<div class="mt-4 text-muted small">
+    <i class="bi bi-info-circle me-1"></i>
+    Only one provider can be active at a time. To recover from a broken configuration, run
+    <code>docker compose exec app bin/console app:saml:import-metadata /path/to/idp-metadata.xml</code>
+    (a URL is also accepted in place of a file path).
+</div>
+{% endblock %}
