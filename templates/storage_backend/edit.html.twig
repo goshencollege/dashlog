@@ -1,0 +1,178 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}{{ is_new ? 'Add Storage Backend' : 'Edit ' ~ backend.name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>
+        <i class="bi bi-hdd-network me-2"></i>
+        {{ is_new ? 'Add Storage Backend' : 'Edit ' ~ backend.name }}
+    </h1>
+    <a href="{{ path('storage_backend_index') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Back
+    </a>
+</div>
+
+{{ form_start(form, {attr: {novalidate: 'novalidate'}}) }}
+<div class="row g-4">
+
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header"><strong>General</strong></div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-lg-5">
+                        {{ form_label(form.name, null, {label_attr: {class: 'form-label fw-semibold'}}) }}
+                        {{ form_widget(form.name, {attr: {class: 'form-control'}}) }}
+                        {{ form_errors(form.name) }}
+                        {{ form_help(form.name) }}
+                    </div>
+                    <div class="col-lg-4">
+                        {{ form_label(form.type, null, {label_attr: {class: 'form-label fw-semibold'}}) }}
+                        {{ form_widget(form.type, {id: 'storage-backend-type-select', attr: {class: 'form-select'}}) }}
+                        {{ form_errors(form.type) }}
+                    </div>
+                    <div class="col-lg-3">
+                        {{ form_label(form.isActive, null, {label_attr: {class: 'form-label fw-semibold'}}) }}
+                        <div class="form-check">
+                            {{ form_widget(form.isActive, {attr: {class: 'form-check-input'}}) }}
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        {{ form_help(form.isActive) }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 backend-type-section" data-type="local">
+        <div class="card">
+            <div class="card-header"><strong>Local Directory</strong></div>
+            <div class="card-body">
+                <div class="mb-0">
+                    {{ form_label(form.path, null, {label_attr: {class: 'form-label fw-semibold'}}) }}
+                    {{ form_widget(form.path, {attr: {class: 'form-control'}}) }}
+                    {{ form_errors(form.path) }}
+                    {{ form_help(form.path) }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 backend-type-section" data-type="cifs">
+        <div class="card">
+            <div class="card-header"><strong>CIFS / SMB Share</strong></div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-lg-4">
+                        {{ form_label(form.cifsHost, null, {label_attr: {class: 'form-label fw-semibold'}}) }}
+                        {{ form_widget(form.cifsHost, {attr: {class: 'form-control'}}) }}
+                        {{ form_errors(form.cifsHost) }}
+                    </div>
+                    <div class="col-lg-4">
+                        {{ form_label(form.cifsShare, null, {label_attr: {class: 'form-label fw-semibold'}}) }}
+                        {{ form_widget(form.cifsShare, {attr: {class: 'form-control'}}) }}
+                        {{ form_errors(form.cifsShare) }}
+                    </div>
+                    <div class="col-lg-4">
+                        {{ form_label(form.cifsRemotePath, null, {label_attr: {class: 'form-label fw-semibold'}}) }}
+                        {{ form_widget(form.cifsRemotePath, {attr: {class: 'form-control'}}) }}
+                        {{ form_errors(form.cifsRemotePath) }}
+                    </div>
+                    <div class="col-lg-4">
+                        {{ form_label(form.cifsUsername, null, {label_attr: {class: 'form-label fw-semibold'}}) }}
+                        {{ form_widget(form.cifsUsername, {attr: {class: 'form-control'}}) }}
+                        {{ form_errors(form.cifsUsername) }}
+                    </div>
+                    <div class="col-lg-4">
+                        {{ form_label(form.cifsDomain, null, {label_attr: {class: 'form-label fw-semibold'}}) }}
+                        {{ form_widget(form.cifsDomain, {attr: {class: 'form-control'}}) }}
+                        {{ form_errors(form.cifsDomain) }}
+                    </div>
+                    <div class="col-lg-4">
+                        {{ form_label(form.cifsPassword, null, {label_attr: {class: 'form-label fw-semibold'}}) }}
+                        {{ form_widget(form.cifsPassword, {attr: {class: 'form-control'}}) }}
+                        {{ form_errors(form.cifsPassword) }}
+                        {{ form_help(form.cifsPassword) }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 backend-type-section" data-type="s3">
+        <div class="card">
+            <div class="card-header"><strong>S3</strong></div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-lg-4">
+                        {{ form_label(form.s3Bucket, null, {label_attr: {class: 'form-label fw-semibold'}}) }}
+                        {{ form_widget(form.s3Bucket, {attr: {class: 'form-control'}}) }}
+                        {{ form_errors(form.s3Bucket) }}
+                    </div>
+                    <div class="col-lg-4">
+                        {{ form_label(form.s3Region, null, {label_attr: {class: 'form-label fw-semibold'}}) }}
+                        {{ form_widget(form.s3Region, {attr: {class: 'form-control'}}) }}
+                        {{ form_errors(form.s3Region) }}
+                    </div>
+                    <div class="col-lg-4">
+                        {{ form_label(form.s3Endpoint, null, {label_attr: {class: 'form-label fw-semibold'}}) }}
+                        {{ form_widget(form.s3Endpoint, {attr: {class: 'form-control'}}) }}
+                        {{ form_errors(form.s3Endpoint) }}
+                        {{ form_help(form.s3Endpoint) }}
+                    </div>
+                    <div class="col-lg-4">
+                        {{ form_label(form.s3PathPrefix, null, {label_attr: {class: 'form-label fw-semibold'}}) }}
+                        {{ form_widget(form.s3PathPrefix, {attr: {class: 'form-control'}}) }}
+                        {{ form_errors(form.s3PathPrefix) }}
+                    </div>
+                    <div class="col-lg-4">
+                        {{ form_label(form.s3AccessKeyId, null, {label_attr: {class: 'form-label fw-semibold'}}) }}
+                        {{ form_widget(form.s3AccessKeyId, {attr: {class: 'form-control'}}) }}
+                        {{ form_errors(form.s3AccessKeyId) }}
+                    </div>
+                    <div class="col-lg-4">
+                        {{ form_label(form.s3SecretAccessKey, null, {label_attr: {class: 'form-label fw-semibold'}}) }}
+                        {{ form_widget(form.s3SecretAccessKey, {attr: {class: 'form-control'}}) }}
+                        {{ form_errors(form.s3SecretAccessKey) }}
+                        {{ form_help(form.s3SecretAccessKey) }}
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check">
+                            {{ form_widget(form.s3UsePathStyleEndpoint, {attr: {class: 'form-check-input'}}) }}
+                            {{ form_label(form.s3UsePathStyleEndpoint, null, {label_attr: {class: 'form-check-label'}}) }}
+                        </div>
+                        {{ form_help(form.s3UsePathStyleEndpoint) }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<div class="mt-4 d-flex gap-2">
+    <button type="submit" class="btn btn-primary">
+        <i class="bi bi-check-lg me-1"></i>{{ is_new ? 'Create Backend' : 'Save Changes' }}
+    </button>
+    <a href="{{ path('storage_backend_index') }}" class="btn btn-outline-secondary">Cancel</a>
+</div>
+{{ form_end(form) }}
+
+<script>
+(function () {
+    var select = document.getElementById('storage-backend-type-select');
+    var sections = document.querySelectorAll('.backend-type-section');
+
+    function sync() {
+        sections.forEach(function (section) {
+            section.style.display = section.dataset.type === select.value ? '' : 'none';
+        });
+    }
+
+    select.addEventListener('change', sync);
+    sync();
+})();
+</script>
+{% endblock %}
