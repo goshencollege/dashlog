@@ -466,7 +466,7 @@
             '<div class="d-flex"><div class="toast-body">' + message + '</div>' +
             '<button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div></div>');
         var el = document.getElementById(id);
-        var toast = new bootstrap.Toast(el, { delay: 5000 });
+        var toast = new bootstrap.Toast(el, { delay: 10000 });
         toast.show();
         el.addEventListener('hidden.bs.toast', function () { el.remove(); });
     }
