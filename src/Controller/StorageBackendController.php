@@ -136,11 +136,31 @@ class StorageBackendController extends AbstractController
         try {
             $filesystem = $this->storageBackendFactory->createFilesystem($backend);
             $filesystem->write($probe, $content);
-            $readBack = $filesystem->read($probe);
+
+            // Some backends (notably CIFS via the smbclient CLI wrapper) return from
+            // write() once the local side is flushed, before the remote copy is
+            // guaranteed to be complete — an immediate read can race that and return
+            // stale/partial content. A few short retries absorb that without adding
+            // any delay for backends that are already fully synchronous.
+            $readBack = null;
+            for ($attempt = 1; $attempt <= 3; $attempt++) {
+                $readBack = $filesystem->read($probe);
+                if ($readBack === $content) {
+                    break;
+                }
+                if ($attempt < 3) {
+                    usleep(500_000);
+                }
+            }
+
             $filesystem->delete($probe);
 
             if ($readBack !== $content) {
-                throw new \RuntimeException('Round-tripped content did not match what was written.');
+                throw new \RuntimeException(sprintf(
+                    'Round-tripped content did not match what was written (wrote %d bytes, read back %d bytes after 3 attempts).',
+                    strlen($content),
+                    strlen((string) $readBack)
+                ));
             }
 
             $backend->setLastCheckStatus('ok');
