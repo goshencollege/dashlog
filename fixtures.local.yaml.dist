@@ -11,3 +11,7 @@ saml_providers:
     idp_entity_id: "https://idp.example.com/saml2/idp/metadata.php"
     idp_sso_url: "https://idp.example.com/saml2/idp/SSOService.php"
     idp_cert: "MIID..."   # base64 X.509 cert, no PEM headers
+    # Optional: name of the SAML attribute whose asserted value(s) are role identifiers.
+    # The IdP must assert values like "ROLE_ADMIN" in this attribute for admin access.
+    # Leave unset to disable SSO-driven roles (everyone gets User access).
+    # role_attribute: "groups"

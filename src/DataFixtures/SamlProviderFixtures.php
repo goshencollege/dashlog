@@ -43,6 +43,7 @@ class SamlProviderFixtures extends Fixture
             $provider->setIdpEntityId($data['idp_entity_id']);
             $provider->setIdpSsoUrl($data['idp_sso_url']);
             $provider->setIdpCert($data['idp_cert']);
+            $provider->setRoleAttribute($data['role_attribute'] ?? null);
 
             $manager->persist($provider);
         }

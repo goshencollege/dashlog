@@ -273,6 +273,7 @@
         </button>
         <div class="collapse navbar-collapse" id="navMenu">
             <ul class="navbar-nav me-auto">
+                {% if is_granted('ROLE_ADMIN') %}
                 {% set settingsActive = app.request.attributes.get('_route') starts with 'saml_provider' %}
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle {{ settingsActive ? 'active' }}" href="#" data-bs-toggle="dropdown">
@@ -287,6 +288,7 @@
                         </li>
                     </ul>
                 </li>
+                {% endif %}
             </ul>
             {% if app.user %}
             <ul class="navbar-nav ms-auto align-items-center">

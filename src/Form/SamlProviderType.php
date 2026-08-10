@@ -71,6 +71,14 @@ class SamlProviderType extends AbstractType
                 'attr'  => ['min' => 1, 'max' => 1440],
                 'help'  => 'How long users can be inactive before they must log in again. Default is 30 minutes.',
             ])
+            ->add('roleAttribute', TextType::class, [
+                'label'    => 'Role Attribute',
+                'required' => false,
+                'attr'     => ['placeholder' => 'e.g. groups'],
+                'help'     => 'Name of the SAML attribute whose asserted value(s) are role identifiers (e.g. ROLE_ADMIN). '
+                    . 'Configure your IdP to send this attribute with the right role for each user. '
+                    . 'Leave blank to disable SSO-driven roles — everyone gets User access.',
+            ])
         ;
     }
 
