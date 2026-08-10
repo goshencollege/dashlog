@@ -92,6 +92,17 @@ class StorageBackendControllerTest extends WebTestCase
         self::assertSame(['local', 'cifs', 's3'], $sectionTypes);
     }
 
+    public function testNewFormActiveCheckboxIsCheckedByDefault(): void
+    {
+        $client  = $this->loginAsAdmin();
+        $crawler = $client->request('GET', '/storage-backends/new');
+
+        self::assertResponseIsSuccessful();
+        $checkbox = $crawler->filter('input[name="storage_backend[isActive]"][type="checkbox"]');
+        self::assertCount(1, $checkbox);
+        self::assertSame('checked', $checkbox->attr('checked'));
+    }
+
     public function testCreateEditToggleAndDeleteLocalBackend(): void
     {
         $client = $this->loginAsAdmin();
@@ -107,6 +118,9 @@ class StorageBackendControllerTest extends WebTestCase
             'storage_backend[type]' => 'local',
             'storage_backend[path]' => $tmpDir,
         ]);
+        // isActive defaults to checked (new backends are active by default) — untick it
+        // here so this test can deliberately exercise the inactive -> active toggle flow.
+        $form['storage_backend[isActive]']->untick();
         $client->submit($form);
 
         self::assertResponseRedirects('/storage-backends');

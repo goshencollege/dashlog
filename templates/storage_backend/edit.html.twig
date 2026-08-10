@@ -32,8 +32,9 @@
                         {{ form_widget(form.type, {id: 'storage-backend-type-select', attr: {class: 'form-select'}}) }}
                         {{ form_errors(form.type) }}
                     </div>
-                    <div class="col-lg-3 d-flex align-items-end">
-                        <div class="form-check mb-2">
+                    <div class="col-lg-3">
+                        <label class="form-label fw-semibold d-block">&nbsp;</label>
+                        <div class="form-check text-nowrap">
                             {{ form_widget(form.isActive, {attr: {class: 'form-check-input'}}) }}
                             {{ form_label(form.isActive, null, {label_attr: {class: 'form-check-label'}}) }}
                         </div>

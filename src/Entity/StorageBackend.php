@@ -29,7 +29,7 @@ class StorageBackend
     private StorageBackendType $type = StorageBackendType::Local;
 
     #[ORM\Column]
-    private bool $isActive = false;
+    private bool $isActive = true;
 
     // Local
     #[ORM\Column(length: 1024, nullable: true)]
