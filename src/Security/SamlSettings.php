@@ -18,6 +18,18 @@ class SamlSettings
         return ($provider?->getSessionLifetimeMinutes() ?? 30) * 60;
     }
 
+    public function resolveRoles(array $attributes): array
+    {
+        $provider = $this->repository->findActive();
+        $attrName = $provider?->getRoleAttribute();
+        $values   = $attrName ? ($attributes[$attrName] ?? []) : [];
+
+        $roles   = array_values(array_filter($values, static fn($v) => is_string($v) && str_starts_with($v, 'ROLE_')));
+        $roles[] = 'ROLE_USER';
+
+        return array_unique($roles);
+    }
+
     public function toArray(): array
     {
         $provider = $this->repository->findActive();

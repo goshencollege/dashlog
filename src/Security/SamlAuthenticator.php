@@ -51,9 +51,10 @@ class SamlAuthenticator extends AbstractAuthenticator implements AuthenticationE
 
         $identifier = $auth->getNameId();
         $attributes = $auth->getAttributes();
+        $roles      = $this->samlSettings->resolveRoles($attributes);
 
         return new SelfValidatingPassport(
-            new UserBadge($identifier, fn() => new SamlUser($identifier, $attributes))
+            new UserBadge($identifier, fn() => new SamlUser($identifier, $attributes, $roles))
         );
     }
 

@@ -33,6 +33,12 @@
                         {{ form_errors(form.sessionLifetimeMinutes) }}
                         {{ form_help(form.sessionLifetimeMinutes) }}
                     </div>
+                    <div class="col-lg-6">
+                        {{ form_label(form.roleAttribute, null, {label_attr: {class: 'form-label fw-semibold'}}) }}
+                        {{ form_widget(form.roleAttribute, {attr: {class: 'form-control font-monospace'}}) }}
+                        {{ form_errors(form.roleAttribute) }}
+                        {{ form_help(form.roleAttribute) }}
+                    </div>
                 </div>
             </div>
         </div>

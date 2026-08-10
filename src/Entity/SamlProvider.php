@@ -65,6 +65,9 @@ class SamlProvider
     #[Assert\Range(min: 1, max: 1440)]
     private int $sessionLifetimeMinutes = 30;
 
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $roleAttribute = null;
+
     public function __construct()
     {
         $this->createdAt = new \DateTimeImmutable();
@@ -105,4 +108,7 @@ class SamlProvider
 
     public function getSessionLifetimeMinutes(): int { return $this->sessionLifetimeMinutes; }
     public function setSessionLifetimeMinutes(int $sessionLifetimeMinutes): static { $this->sessionLifetimeMinutes = $sessionLifetimeMinutes; return $this; }
+
+    public function getRoleAttribute(): ?string { return $this->roleAttribute; }
+    public function setRoleAttribute(?string $roleAttribute): static { $this->roleAttribute = $roleAttribute; return $this; }
 }

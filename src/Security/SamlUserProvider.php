@@ -8,6 +8,10 @@ use Symfony\Component\Security\Core\User\UserProviderInterface;
 
 class SamlUserProvider implements UserProviderInterface
 {
+    public function __construct(
+        private readonly SamlSettings $samlSettings,
+    ) {}
+
     public function loadUserByIdentifier(string $identifier): UserInterface
     {
         // Users are created by SamlAuthenticator from SAML assertions, not loaded here.
@@ -19,8 +23,11 @@ class SamlUserProvider implements UserProviderInterface
         if (!$user instanceof SamlUser) {
             throw new UnsupportedUserException(sprintf('Expected %s, got %s.', SamlUser::class, $user::class));
         }
-        // User is stored in the session with all attributes — return as-is.
-        return $user;
+
+        // Recompute roles on every request so role-mapping changes apply without forcing re-login.
+        $roles = $this->samlSettings->resolveRoles($user->getAttributes());
+
+        return new SamlUser($user->getUserIdentifier(), $user->getAttributes(), $roles);
     }
 
     public function supportsClass(string $class): bool
