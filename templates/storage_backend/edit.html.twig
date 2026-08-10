@@ -33,10 +33,9 @@
                         {{ form_errors(form.type) }}
                     </div>
                     <div class="col-lg-3">
-                        <label class="form-label fw-semibold d-block">&nbsp;</label>
-                        <div class="form-check text-nowrap">
+                        {{ form_label(form.isActive, null, {label_attr: {class: 'form-label fw-semibold'}}) }}
+                        <div class="form-check">
                             {{ form_widget(form.isActive, {attr: {class: 'form-check-input'}}) }}
-                            {{ form_label(form.isActive, null, {label_attr: {class: 'form-check-label'}}) }}
                         </div>
                     </div>
                     <div class="col-12">
