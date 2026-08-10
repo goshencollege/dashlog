@@ -70,6 +70,28 @@ class StorageBackendControllerTest extends WebTestCase
         self::assertSelectorTextContains('h1', 'Storage Backends');
     }
 
+    /**
+     * Guards the type-select's id: the show/hide JS looks it up by id, and a
+     * duplicate `id` attribute (one from Symfony's default, one from an `attr`
+     * override) silently breaks that lookup without any server-side error.
+     */
+    public function testNewFormTypeSelectHasExactlyOneMatchingIdForTheToggleScript(): void
+    {
+        $client  = $this->loginAsAdmin();
+        $crawler = $client->request('GET', '/storage-backends/new');
+
+        self::assertResponseIsSuccessful();
+        self::assertCount(1, $crawler->filter('#storage-backend-type-select'));
+        self::assertSame(
+            1,
+            substr_count($client->getResponse()->getContent(), 'id="storage-backend-type-select"'),
+            'The type <select> must have exactly one id="storage-backend-type-select" attribute.'
+        );
+
+        $sectionTypes = $crawler->filter('.backend-type-section')->extract(['data-type']);
+        self::assertSame(['local', 'cifs', 's3'], $sectionTypes);
+    }
+
     public function testCreateEditToggleAndDeleteLocalBackend(): void
     {
         $client = $this->loginAsAdmin();
