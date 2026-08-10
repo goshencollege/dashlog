@@ -15,7 +15,15 @@ RUN apk add --no-cache \
         pdo_mysql \
         intl \
         opcache \
-        zip
+        zip \
+    # libsmbclient-php gives icewind/smb (CIFS backend) a native, in-process client
+    # instead of shelling out to smbclient — faster and avoids the CLI wrapper's
+    # write-completion race. samba-dev/build tools are build-only: libsmbclient
+    # itself stays installed afterward since samba-client already depends on it.
+    && apk add --no-cache --virtual .smbclient-build-deps ${PHPIZE_DEPS} samba-dev \
+    && pecl install smbclient \
+    && docker-php-ext-enable smbclient \
+    && apk del .smbclient-build-deps
 
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 COPY docker/php/php.ini /usr/local/etc/php/conf.d/app.ini
