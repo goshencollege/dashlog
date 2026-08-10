@@ -64,8 +64,7 @@
                                 <button type="button" class="btn btn-sm btn-outline-secondary quick-action-btn"
                                         data-endpoint="{{ path('storage_backend_test', {id: backend.id}) }}"
                                         data-csrf-token="{{ csrf_token('test' ~ backend.id) }}"
-                                        data-success="Connection test succeeded."
-                                        data-reload="true">
+                                        data-success="Connection test succeeded.">
                                     <i class="bi bi-plug me-1"></i>Test
                                 </button>
                                 <form method="post" action="{{ path('storage_backend_toggle', {id: backend.id}) }}">

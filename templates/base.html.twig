@@ -475,7 +475,6 @@
         btn.addEventListener('click', function () {
             var endpoint = this.dataset.endpoint;
             var successMsg = this.dataset.success;
-            var reload = this.dataset.reload === 'true';
             btn.disabled = true;
             fetch(endpoint, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': btn.dataset.csrfToken } })
                 .then(function (r) { return r.json(); })
@@ -484,12 +483,6 @@
                         showToast('<i class="bi bi-exclamation-triangle-fill me-2"></i>' + data.error, 'error');
                     } else {
                         showToast('<i class="bi bi-check-circle-fill me-2"></i>' + successMsg, 'success');
-                    }
-                    // Reload so any server-side state the action updated (e.g. a
-                    // status badge elsewhere on the page) is reflected once the
-                    // toast has had a moment to be seen.
-                    if (reload) {
-                        setTimeout(function () { window.location.reload(); }, 900);
                     }
                 })
                 .catch(function (err) {
