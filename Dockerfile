@@ -9,6 +9,7 @@ RUN apk add --no-cache \
     icu-libs \
     libzip-dev \
     mysql-client \
+    samba-client \
     && docker-php-ext-install \
         pdo \
         pdo_mysql \

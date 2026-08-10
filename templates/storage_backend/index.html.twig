@@ -1,0 +1,109 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Storage Backends{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="bi bi-hdd-network me-2"></i>Storage Backends</h1>
+    <a href="{{ path('storage_backend_new') }}" class="btn btn-primary">
+        <i class="bi bi-plus-lg me-1"></i>Add Backend
+    </a>
+</div>
+
+{% if backends is empty %}
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle me-2"></i>
+        No storage backends configured. Log collection has nowhere to write until at least one backend is added and activated.
+    </div>
+{% else %}
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Type</th>
+                        <th>Status</th>
+                        <th>Last Check</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for backend in backends %}
+                    <tr>
+                        <td class="align-middle fw-semibold">{{ backend.name }}</td>
+                        <td class="align-middle">
+                            <span class="badge bg-secondary-subtle text-secondary-emphasis border">{{ backend.type.label }}</span>
+                        </td>
+                        <td class="align-middle">
+                            {% if backend.isActive %}
+                                <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Active</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td class="align-middle">
+                            {% if backend.lastCheckedAt is null %}
+                                <span class="text-muted small">Never tested</span>
+                            {% elseif backend.lastCheckStatus == 'ok' %}
+                                <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle"
+                                      title="{{ backend.lastCheckMessage }}">
+                                    <i class="bi bi-check-lg me-1"></i>OK
+                                </span>
+                                <div class="text-muted small">{{ backend.lastCheckedAt|date('Y-m-d H:i') }}</div>
+                            {% else %}
+                                <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle"
+                                      title="{{ backend.lastCheckMessage }}">
+                                    <i class="bi bi-x-lg me-1"></i>Error
+                                </span>
+                                <div class="text-muted small">{{ backend.lastCheckedAt|date('Y-m-d H:i') }}</div>
+                            {% endif %}
+                        </td>
+                        <td class="align-middle text-end">
+                            <div class="d-flex gap-2 justify-content-end">
+                                <button type="button" class="btn btn-sm btn-outline-secondary quick-action-btn"
+                                        data-endpoint="{{ path('storage_backend_test', {id: backend.id}) }}"
+                                        data-csrf-token="{{ csrf_token('test' ~ backend.id) }}"
+                                        data-success="Connection test succeeded.">
+                                    <i class="bi bi-plug me-1"></i>Test
+                                </button>
+                                <form method="post" action="{{ path('storage_backend_toggle', {id: backend.id}) }}">
+                                    <input type="hidden" name="_token" value="{{ csrf_token('toggle' ~ backend.id) }}">
+                                    {% if backend.isActive %}
+                                        <button type="submit" class="btn btn-sm btn-outline-secondary">
+                                            <i class="bi bi-pause-circle me-1"></i>Deactivate
+                                        </button>
+                                    {% else %}
+                                        <button type="submit" class="btn btn-sm btn-outline-success">
+                                            <i class="bi bi-check-circle me-1"></i>Activate
+                                        </button>
+                                    {% endif %}
+                                </form>
+                                <a href="{{ path('storage_backend_edit', {id: backend.id}) }}"
+                                   class="btn btn-sm btn-outline-secondary">
+                                    <i class="bi bi-pencil me-1"></i>Edit
+                                </a>
+                                {% if not backend.isActive %}
+                                <form method="post" action="{{ path('storage_backend_delete', {id: backend.id}) }}">
+                                    <input type="hidden" name="_token" value="{{ csrf_token('delete' ~ backend.id) }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger"
+                                            onclick="return confirm('Delete {{ backend.name|e('js') }}? This cannot be undone.')">
+                                        <i class="bi bi-trash me-1"></i>Delete
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% endif %}
+
+<div class="mt-4 text-muted small">
+    <i class="bi bi-info-circle me-1"></i>
+    Multiple backends may be active at the same time. Use "Test" to confirm a backend is reachable before relying on it.
+</div>
+{% endblock %}
