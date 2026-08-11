@@ -8,11 +8,14 @@ use App\Entity\LogObject;
 use App\Entity\StorageBackend;
 use App\Enum\StorageBackendType;
 use App\Service\LogIngestor;
+use App\Service\SpoolProvider;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 
 class LogIngestionPipelineTest extends KernelTestCase
 {
+    private const SPOOL_PATH = '/var/www/html/var/log-spool-test';
+
     private string $tmpDir;
     private EntityManagerInterface $em;
     private LogIngestor $ingestor;
@@ -26,6 +29,7 @@ class LogIngestionPipelineTest extends KernelTestCase
         $this->em->createQuery('DELETE FROM App\Entity\LogEntry')->execute();
         $this->em->createQuery('DELETE FROM App\Entity\LogObject')->execute();
         $this->em->createQuery('DELETE FROM App\Entity\StorageBackend')->execute();
+        $this->removeDirectory(self::SPOOL_PATH);
 
         $this->tmpDir = sys_get_temp_dir() . '/dashlog-ingest-test-' . bin2hex(random_bytes(4));
         mkdir($this->tmpDir);
@@ -42,10 +46,11 @@ class LogIngestionPipelineTest extends KernelTestCase
     protected function tearDown(): void
     {
         $this->removeDirectory($this->tmpDir);
+        $this->removeDirectory(self::SPOOL_PATH);
         parent::tearDown();
     }
 
-    public function testFlushAllWritesBatchAndCatalogsIt(): void
+    public function testFlushAllWritesBatchToSpoolAndCatalogsIt(): void
     {
         $windowStart = new \DateTimeImmutable('2026-08-11T14:15:00+00:00');
 
@@ -76,7 +81,10 @@ class LogIngestionPipelineTest extends KernelTestCase
 
         $logObject = $this->em->getRepository(LogObject::class)->findOneBy(['source' => 'web-01']);
         self::assertNotNull($logObject);
-        self::assertSame('stored', $logObject->getStatus());
+        // Ingestion always lands on the write-ahead spool first, never
+        // directly on a "real" backend — draining is a separate step.
+        self::assertTrue($logObject->getStorageBackend()->isSpool());
+        self::assertSame('staged', $logObject->getStatus());
         self::assertSame(2, $logObject->getEntryCount());
         self::assertSame('web-01/2026/08/11/14-15.log.gz', $logObject->getObjectKey());
 
@@ -86,7 +94,7 @@ class LogIngestionPipelineTest extends KernelTestCase
         self::assertSame('second message', $entries[1]->getMessage());
         self::assertSame($logObject->getId(), $entries[0]->getLogObject()->getId());
 
-        $storedPath = $this->tmpDir . '/web-01/2026/08/11/14-15.log.gz';
+        $storedPath = self::SPOOL_PATH . '/web-01/2026/08/11/14-15.log.gz';
         self::assertFileExists($storedPath);
 
         $lines = array_values(array_filter(explode("\n", gzdecode(file_get_contents($storedPath)))));
@@ -94,14 +102,14 @@ class LogIngestionPipelineTest extends KernelTestCase
         $decoded = json_decode($lines[0], true);
         self::assertSame('first message', $decoded['message']);
 
-        $metaPath = $this->tmpDir . '/web-01/2026/08/11/14-15.meta.json';
+        $metaPath = self::SPOOL_PATH . '/web-01/2026/08/11/14-15.meta.json';
         self::assertFileExists($metaPath);
         $meta = json_decode(file_get_contents($metaPath), true);
         self::assertSame(2, $meta['entryCount']);
         self::assertSame($logObject->getChecksumSha256(), $meta['checksumSha256']);
     }
 
-    public function testFlushWithNoActiveBackendLeavesBufferForNextAttempt(): void
+    public function testIngestionSucceedsEvenWithNoActiveRealBackend(): void
     {
         $this->em->createQuery('UPDATE App\Entity\StorageBackend s SET s.isActive = false')->execute();
 
@@ -114,14 +122,35 @@ class LogIngestionPipelineTest extends KernelTestCase
             procId: null,
             severity: 5,
             facility: 4,
-            message: 'undeliverable',
-            raw: 'undeliverable',
+            message: 'still arrives',
+            raw: 'still arrives',
         ));
 
-        // Should not throw — a failed flush is logged and retried later, not fatal.
+        // The spool is always available regardless of real backend health,
+        // so this must succeed — only later draining would need a real
+        // active backend.
         $this->ingestor->flushAll(new \DateTimeImmutable('2026-08-11T14:16:00+00:00'));
 
-        self::assertNull($this->em->getRepository(LogObject::class)->findOneBy(['source' => 'web-02']));
+        $logObject = $this->em->getRepository(LogObject::class)->findOneBy(['source' => 'web-02']);
+        self::assertNotNull($logObject);
+        self::assertTrue($logObject->getStorageBackend()->isSpool());
+        self::assertSame('staged', $logObject->getStatus());
+    }
+
+    public function testSpoolIsCreatedOnceAndReused(): void
+    {
+        $windowStart = new \DateTimeImmutable('2026-08-11T14:15:00+00:00');
+        $this->ingestor->ingest(new IngestedLogLine(
+            source: 'web-01', timestamp: $windowStart, host: 'web-01', appName: 'sshd',
+            procId: null, severity: 5, facility: 4, message: 'one', raw: 'one',
+        ));
+        $this->ingestor->flushAll(new \DateTimeImmutable('2026-08-11T14:16:00+00:00'));
+
+        $spoolProvider = self::getContainer()->get(SpoolProvider::class);
+        $spool = $spoolProvider->getSpool();
+
+        self::assertCount(1, $this->em->getRepository(StorageBackend::class)->findBy(['isSpool' => true]));
+        self::assertSame(self::SPOOL_PATH, $spool->getPath());
     }
 
     private function removeDirectory(string $dir): void

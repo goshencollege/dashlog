@@ -40,6 +40,13 @@ class StorageBackend
     #[ORM\Column(nullable: true)]
     private ?int $maxAgeDays = null;
 
+    // System-managed write-ahead spool (see SpoolProvider) — not exposed in
+    // the admin form. Excluded from tiering/ingestion's normal backend
+    // selection; everything landing here is transient, waiting to be
+    // drained to a real backend by SpoolDrainService.
+    #[ORM\Column]
+    private bool $isSpool = false;
+
     // Local
     #[ORM\Column(length: 1024, nullable: true)]
     private ?string $path = null;
@@ -119,6 +126,9 @@ class StorageBackend
 
     public function getMaxAgeDays(): ?int { return $this->maxAgeDays; }
     public function setMaxAgeDays(?int $maxAgeDays): static { $this->maxAgeDays = $maxAgeDays; return $this; }
+
+    public function isSpool(): bool { return $this->isSpool; }
+    public function setIsSpool(bool $isSpool): static { $this->isSpool = $isSpool; return $this; }
 
     public function getPath(): ?string { return $this->path; }
     public function setPath(?string $path): static { $this->path = $path; return $this; }

@@ -1,5 +1,8 @@
 # yaml-language-server: $schema=../vendor/symfony/dependency-injection/Loader/schema/services.schema.json
 
+parameters:
+    default_log_spool_path: '%kernel.project_dir%/var/log-spool'
+
 services:
     _defaults:
         autowire: true
@@ -22,6 +25,10 @@ services:
     App\Service\BatchWindowCalculator:
         arguments:
             $windowMinutes: '%env(int:LOG_BATCH_WINDOW_MINUTES)%'
+
+    App\Service\SpoolProvider:
+        arguments:
+            $spoolPath: '%env(default:default_log_spool_path:LOG_SPOOL_PATH)%'
 
     Symfony\Component\HttpFoundation\Session\Storage\Handler\PdoSessionHandler:
         arguments:

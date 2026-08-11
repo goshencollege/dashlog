@@ -25,6 +25,7 @@ class LogCatalogReconcileCommandTest extends KernelTestCase
         $this->em = self::getContainer()->get(EntityManagerInterface::class);
         $this->storageService = self::getContainer()->get(StorageService::class);
 
+        $this->em->createQuery('DELETE FROM App\Entity\LogEntry')->execute();
         $this->em->createQuery('DELETE FROM App\Entity\LogObject')->execute();
         $this->em->createQuery('DELETE FROM App\Entity\StorageBackend')->execute();
 
