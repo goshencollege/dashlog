@@ -4,8 +4,8 @@ namespace App\Service;
 
 use App\Entity\StorageBackend;
 use App\Enum\StorageBackendType;
-use App\Repository\StorageBackendRepository;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\Persistence\ManagerRegistry;
 
 /**
  * Finds (or, on first use, creates) the system write-ahead spool — a
@@ -13,19 +13,26 @@ use Doctrine\ORM\EntityManagerInterface;
  * decoupling "did the write succeed" from the health of whatever real
  * backend is ultimately supposed to hold the data. SpoolDrainService moves
  * objects off it onto a real backend in the background.
+ *
+ * Called from both the long-running syslog listener and the (already
+ * Messenger-protected) worker's spool-drain sweep, so it resolves its own
+ * EntityManager fresh each call rather than caching one — see
+ * LogBatchWriter's docblock for why a cached one isn't safe for a daemon
+ * that never restarts.
  */
 class SpoolProvider
 {
     public function __construct(
-        private readonly StorageBackendRepository $storageBackendRepository,
-        private readonly EntityManagerInterface $em,
+        private readonly ManagerRegistry $doctrine,
         private readonly string $spoolPath,
     ) {
     }
 
     public function getSpool(): StorageBackend
     {
-        $spool = $this->storageBackendRepository->findOneBy(['isSpool' => true]);
+        $em = $this->entityManager();
+
+        $spool = $em->getRepository(StorageBackend::class)->findOneBy(['isSpool' => true]);
         if ($spool !== null) {
             return $spool;
         }
@@ -36,9 +43,16 @@ class SpoolProvider
         $spool->setPath($this->spoolPath);
         $spool->setIsActive(true);
         $spool->setIsSpool(true);
-        $this->em->persist($spool);
-        $this->em->flush();
+        $em->persist($spool);
+        $em->flush();
 
         return $spool;
+    }
+
+    private function entityManager(): EntityManagerInterface
+    {
+        $em = $this->doctrine->getManager();
+
+        return $em->isOpen() ? $em : $this->doctrine->resetManager();
     }
 }

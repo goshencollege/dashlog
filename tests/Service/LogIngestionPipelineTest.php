@@ -10,6 +10,7 @@ use App\Enum\StorageBackendType;
 use App\Service\LogIngestor;
 use App\Service\SpoolProvider;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\Persistence\ManagerRegistry;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 
 class LogIngestionPipelineTest extends KernelTestCase
@@ -135,6 +136,83 @@ class LogIngestionPipelineTest extends KernelTestCase
         self::assertNotNull($logObject);
         self::assertTrue($logObject->getStorageBackend()->isSpool());
         self::assertSame('staged', $logObject->getStatus());
+    }
+
+    public function testFlushRecoversAfterEntityManagerIsClosedByAPriorFailure(): void
+    {
+        // Doctrine permanently closes an EntityManager after any failed
+        // flush (a deadlock, a dropped connection, anything) — every later
+        // call on that same instance keeps throwing after that. Since
+        // SyslogListenCommand's loop reuses the same injected services for
+        // the lifetime of the process, this must self-heal rather than wedge
+        // ingestion forever. Simulate the "already closed" precondition
+        // directly rather than trying to trigger a real flush failure.
+        $this->em->close();
+
+        $windowStart = new \DateTimeImmutable('2026-08-11T14:15:00+00:00');
+        $this->ingestor->ingest(new IngestedLogLine(
+            source: 'web-03',
+            timestamp: $windowStart,
+            host: 'web-03',
+            appName: 'sshd',
+            procId: null,
+            severity: 5,
+            facility: 4,
+            message: 'survives a closed entity manager',
+            raw: 'survives a closed entity manager',
+        ));
+
+        $this->ingestor->flushAll(new \DateTimeImmutable('2026-08-11T14:16:00+00:00'));
+
+        // The closed EM from setUp is now stale; fetch a fresh one to verify.
+        $em = self::getContainer()->get(ManagerRegistry::class)->resetManager();
+        $logObject = $em->getRepository(LogObject::class)->findOneBy(['source' => 'web-03']);
+        self::assertNotNull($logObject);
+        self::assertSame('staged', $logObject->getStatus());
+    }
+
+    public function testSecondBurstLandingInAnAlreadyFlushedWindowMergesInsteadOfColliding(): void
+    {
+        // A source's traffic can split across a gap that straddles a window
+        // boundary: the window closes and flushes, then more lines for that
+        // *same* window arrive afterward. The second flush must not silently
+        // clobber the first's stored object while failing to update its
+        // catalog row (object_key is unique per backend) — that would leave
+        // the recorded checksum permanently wrong. This is exactly what
+        // happened with a real "minnesota" source once batching windows
+        // were shortened to 1 minute for faster local testing.
+        $windowStart = new \DateTimeImmutable('2026-08-11T14:15:00+00:00');
+
+        $this->ingestor->ingest(new IngestedLogLine(
+            source: 'minnesota', timestamp: $windowStart, host: 'minnesota', appName: 'Hostd',
+            procId: null, severity: 5, facility: 4, message: 'first burst', raw: 'first burst',
+        ));
+        $this->ingestor->flushAll(new \DateTimeImmutable('2026-08-11T14:16:00+00:00'));
+
+        $this->ingestor->ingest(new IngestedLogLine(
+            source: 'minnesota', timestamp: $windowStart->modify('+30 seconds'), host: 'minnesota', appName: 'Hostd',
+            procId: null, severity: 5, facility: 4, message: 'second burst', raw: 'second burst',
+        ));
+        $this->ingestor->flushAll(new \DateTimeImmutable('2026-08-11T14:17:00+00:00'));
+
+        $objects = $this->em->getRepository(LogObject::class)->findBy(['source' => 'minnesota']);
+        self::assertCount(1, $objects, 'the second flush must merge into the same catalog row, not create a second one');
+
+        $logObject = $objects[0];
+        self::assertSame(2, $logObject->getEntryCount());
+
+        $entries = $this->em->getRepository(LogEntry::class)->findBy(['source' => 'minnesota'], ['timestamp' => 'ASC']);
+        self::assertCount(2, $entries);
+        self::assertSame('first burst', $entries[0]->getMessage());
+        self::assertSame('second burst', $entries[1]->getMessage());
+
+        $storedPath = self::SPOOL_PATH . '/minnesota/2026/08/11/14-15.log.gz';
+        $lines = array_values(array_filter(explode("\n", gzdecode(file_get_contents($storedPath)))));
+        self::assertCount(2, $lines, 'the stored object must contain both bursts, not just the second');
+
+        // The catalog's recorded checksum must match what is actually
+        // stored — this is the exact invariant that broke in production.
+        self::assertSame(hash('sha256', file_get_contents($storedPath)), $logObject->getChecksumSha256());
     }
 
     public function testSpoolIsCreatedOnceAndReused(): void
