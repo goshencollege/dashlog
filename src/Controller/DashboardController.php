@@ -76,15 +76,18 @@ class DashboardController extends AbstractController
         return $this->json($repo->findDistinctSources($query));
     }
 
-    /** @return array{0: array<string, mixed>, 1: array{source: string[], q: string, severity: string, from: string, to: string}} */
+    /** @return array{0: array<string, mixed>, 1: array{source: string[], q: string, severity: int[], from: string, to: string}} */
     private function parseFilters(Request $request): array
     {
         $sourceParams = array_values(array_unique(array_filter(
             array_map(static fn ($value) => trim((string) $value), $request->query->all('source')),
             static fn (string $value) => $value !== '',
         )));
+        $severityParams = array_values(array_unique(array_map('intval', array_filter(
+            array_map(static fn ($value) => trim((string) $value), $request->query->all('severity')),
+            static fn (string $value) => $value !== '',
+        ))));
         $messageParam = trim((string) $request->query->get('q', ''));
-        $severityParam = (string) $request->query->get('severity', '');
         $fromParam = (string) $request->query->get('from', '');
         $toParam = (string) $request->query->get('to', '');
 
@@ -92,8 +95,8 @@ class DashboardController extends AbstractController
         if ($sourceParams !== []) {
             $filters['source'] = $sourceParams;
         }
-        if ($severityParam !== '') {
-            $filters['severity'] = (int) $severityParam;
+        if ($severityParams !== []) {
+            $filters['severity'] = $severityParams;
         }
         if ($messageParam !== '') {
             $filters['message'] = $messageParam;
@@ -108,7 +111,7 @@ class DashboardController extends AbstractController
         $rawFilters = [
             'source' => $sourceParams,
             'q' => $messageParam,
-            'severity' => $severityParam,
+            'severity' => $severityParams,
             'from' => $fromParam,
             'to' => $toParam,
         ];

@@ -103,10 +103,21 @@ class LogEntryRepositoryTest extends KernelTestCase
         $this->makeEntry('web-01', 3, 'error line', new \DateTimeImmutable());
         $this->makeEntry('web-01', 6, 'info line', new \DateTimeImmutable());
 
-        $result = $this->repo->search(['severity' => 3], 1, 50);
+        $result = $this->repo->search(['severity' => [3]], 1, 50);
 
         self::assertSame(1, $result['total']);
         self::assertSame('error line', $result['results'][0]->getMessage());
+    }
+
+    public function testFilterBySeverityMatchesAnyOfMultipleSelectedValues(): void
+    {
+        $this->makeEntry('web-01', 3, 'error line', new \DateTimeImmutable());
+        $this->makeEntry('web-01', 4, 'warning line', new \DateTimeImmutable());
+        $this->makeEntry('web-01', 6, 'info line', new \DateTimeImmutable());
+
+        $result = $this->repo->search(['severity' => [3, 4]], 1, 50);
+
+        self::assertSame(2, $result['total']);
     }
 
     public function testFilterBySeverityZeroIsNotTreatedAsEmpty(): void
@@ -114,7 +125,7 @@ class LogEntryRepositoryTest extends KernelTestCase
         $this->makeEntry('web-01', 0, 'emergency', new \DateTimeImmutable());
         $this->makeEntry('web-01', 6, 'info', new \DateTimeImmutable());
 
-        $result = $this->repo->search(['severity' => 0], 1, 50);
+        $result = $this->repo->search(['severity' => [0]], 1, 50);
 
         self::assertSame(1, $result['total']);
         self::assertSame('emergency', $result['results'][0]->getMessage());
@@ -189,7 +200,7 @@ class LogEntryRepositoryTest extends KernelTestCase
         $matching = $this->makeEntry('web-01', 3, 'error line', new \DateTimeImmutable());
         $this->makeEntry('web-01', 6, 'info line', new \DateTimeImmutable());
 
-        $result = $this->repo->findNewerThan(0, ['severity' => 3]);
+        $result = $this->repo->findNewerThan(0, ['severity' => [3]]);
 
         self::assertCount(1, $result);
         self::assertSame($matching->getId(), $result[0]->getId());

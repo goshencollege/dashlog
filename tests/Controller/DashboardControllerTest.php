@@ -170,10 +170,25 @@ class DashboardControllerTest extends WebTestCase
         $this->makeEntry('web-01', 3, 'error message', new \DateTimeImmutable());
         $this->makeEntry('web-01', 6, 'info message', new \DateTimeImmutable());
 
-        $crawler = $client->request('GET', '/', ['severity' => '3']);
+        $crawler = $client->request('GET', '/', ['severity' => ['3']]);
 
         self::assertResponseIsSuccessful();
         self::assertSelectorTextContains('body', 'error message');
+        self::assertSelectorTextNotContains('body', 'info message');
+    }
+
+    public function testFilterByMultipleSeveritiesMatchesAny(): void
+    {
+        $client = $this->loginAsUser();
+        $this->makeEntry('web-01', 3, 'error message', new \DateTimeImmutable());
+        $this->makeEntry('web-01', 4, 'warning message', new \DateTimeImmutable());
+        $this->makeEntry('web-01', 6, 'info message', new \DateTimeImmutable());
+
+        $client->request('GET', '/', ['severity' => ['3', '4']]);
+
+        self::assertResponseIsSuccessful();
+        self::assertSelectorTextContains('body', 'error message');
+        self::assertSelectorTextContains('body', 'warning message');
         self::assertSelectorTextNotContains('body', 'info message');
     }
 

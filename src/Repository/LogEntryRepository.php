@@ -15,7 +15,7 @@ class LogEntryRepository extends ServiceEntityRepository
     }
 
     /**
-     * @param array{source?: string[], severity?: int, message?: string, from?: \DateTimeImmutable, to?: \DateTimeImmutable} $filters
+     * @param array{source?: string[], severity?: int[], message?: string, from?: \DateTimeImmutable, to?: \DateTimeImmutable} $filters
      * @return array{results: LogEntry[], total: int}
      */
     public function search(array $filters, int $page, int $perPage): array
@@ -42,7 +42,7 @@ class LogEntryRepository extends ServiceEntityRepository
      * unbounded backlog in one request; it'll just take a few more polls to
      * catch up.
      *
-     * @param array{source?: string[], severity?: int, message?: string, from?: \DateTimeImmutable, to?: \DateTimeImmutable} $filters
+     * @param array{source?: string[], severity?: int[], message?: string, from?: \DateTimeImmutable, to?: \DateTimeImmutable} $filters
      * @return LogEntry[]
      */
     public function findNewerThan(int $sinceId, array $filters, int $limit = 200): array
@@ -57,14 +57,14 @@ class LogEntryRepository extends ServiceEntityRepository
         return $qb->getQuery()->getResult();
     }
 
-    /** @param array{source?: string[], severity?: int, message?: string, from?: \DateTimeImmutable, to?: \DateTimeImmutable} $filters */
+    /** @param array{source?: string[], severity?: int[], message?: string, from?: \DateTimeImmutable, to?: \DateTimeImmutable} $filters */
     private function applyFilters(QueryBuilder $qb, array $filters): void
     {
         if (($filters['source'] ?? []) !== []) {
             $qb->andWhere('l.source IN (:sources)')->setParameter('sources', $filters['source']);
         }
-        if (isset($filters['severity'])) {
-            $qb->andWhere('l.severity = :severity')->setParameter('severity', $filters['severity']);
+        if (($filters['severity'] ?? []) !== []) {
+            $qb->andWhere('l.severity IN (:severities)')->setParameter('severities', $filters['severity']);
         }
         if (($filters['message'] ?? '') !== '') {
             $qb->andWhere('l.message LIKE :message')->setParameter('message', '%' . $filters['message'] . '%');

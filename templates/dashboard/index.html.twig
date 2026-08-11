@@ -101,10 +101,9 @@
             </div>
             <div class="col-md-2">
                 <label class="form-label small mb-1">Severity</label>
-                <select name="severity" class="form-select form-select-sm">
-                    <option value="">Any</option>
+                <select id="severity-select" name="severity[]" multiple class="form-select form-select-sm">
                     {% for severity in severities %}
-                        <option value="{{ severity.value }}" {{ filters.severity == severity.value ? 'selected' }}>{{ severity.label() }}</option>
+                        <option value="{{ severity.value }}" {{ severity.value in filters.severity ? 'selected' }}>{{ severity.label() }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -208,6 +207,10 @@
                 .then(function (sources) { callback(sources.map(function (s) { return {source: s}; })); })
                 .catch(function () { callback(); });
         },
+    });
+    new TomSelect('#severity-select', {
+        plugins: ['remove_button'],
+        create: false,
     });
 })();
 </script>
