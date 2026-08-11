@@ -215,6 +215,64 @@ class LogIngestionPipelineTest extends KernelTestCase
         self::assertSame(hash('sha256', file_get_contents($storedPath)), $logObject->getChecksumSha256());
     }
 
+    public function testLinesAreVisibleBeforeTheirWindowCloses(): void
+    {
+        $windowStart = new \DateTimeImmutable('2026-08-11T14:15:00+00:00');
+        $this->ingestor->ingest(new IngestedLogLine(
+            source: 'web-04', timestamp: $windowStart, host: 'web-04', appName: 'sshd',
+            procId: null, severity: 5, facility: 4, message: 'visible early', raw: 'visible early',
+        ));
+
+        // No flushExpiredWindows/flushAll call — the window is still open.
+        $this->ingestor->flushForVisibility();
+
+        $logObject = $this->em->getRepository(LogObject::class)->findOneBy(['source' => 'web-04']);
+        self::assertNotNull($logObject, 'a pending catalog row should exist immediately');
+        self::assertSame('pending', $logObject->getStatus());
+        self::assertSame(1, $logObject->getEntryCount());
+        self::assertNull($logObject->getChecksumSha256(), 'no bytes have been written yet');
+
+        $entries = $this->em->getRepository(LogEntry::class)->findBy(['source' => 'web-04']);
+        self::assertCount(1, $entries, 'the entry must be queryable/browsable immediately');
+        self::assertSame('visible early', $entries[0]->getMessage());
+
+        self::assertFileDoesNotExist(self::SPOOL_PATH . '/web-04/2026/08/11/14-15.log.gz');
+    }
+
+    public function testWindowCloseFinalizesAPreviouslyVisibleObject(): void
+    {
+        $windowStart = new \DateTimeImmutable('2026-08-11T14:15:00+00:00');
+        $this->ingestor->ingest(new IngestedLogLine(
+            source: 'web-05', timestamp: $windowStart, host: 'web-05', appName: 'sshd',
+            procId: null, severity: 5, facility: 4, message: 'made visible early', raw: 'made visible early',
+        ));
+        $this->ingestor->flushForVisibility();
+
+        $this->ingestor->ingest(new IngestedLogLine(
+            source: 'web-05', timestamp: $windowStart->modify('+1 minute'), host: 'web-05', appName: 'sshd',
+            procId: null, severity: 5, facility: 4, message: 'arrived just before close', raw: 'arrived just before close',
+        ));
+        // Window closes with one line already recorded via flushForVisibility
+        // and one line only in pendingEntryLines — flushExpiredWindows must
+        // drain the remainder before finalizing.
+        $this->ingestor->flushAll(new \DateTimeImmutable('2026-08-11T14:17:00+00:00'));
+
+        $logObject = $this->em->getRepository(LogObject::class)->findOneBy(['source' => 'web-05']);
+        self::assertSame('staged', $logObject->getStatus());
+        self::assertSame(2, $logObject->getEntryCount());
+        self::assertNotNull($logObject->getChecksumSha256());
+
+        $entries = $this->em->getRepository(LogEntry::class)->findBy(['source' => 'web-05'], ['timestamp' => 'ASC']);
+        self::assertCount(2, $entries, 'no duplicate LogEntry rows from being recorded twice');
+        self::assertSame('made visible early', $entries[0]->getMessage());
+        self::assertSame('arrived just before close', $entries[1]->getMessage());
+
+        $storedPath = self::SPOOL_PATH . '/web-05/2026/08/11/14-15.log.gz';
+        self::assertFileExists($storedPath);
+        $lines = array_values(array_filter(explode("\n", gzdecode(file_get_contents($storedPath)))));
+        self::assertCount(2, $lines, 'both lines must be in the stored object, not just the one recorded at finalize time');
+    }
+
     public function testSpoolIsCreatedOnceAndReused(): void
     {
         $windowStart = new \DateTimeImmutable('2026-08-11T14:15:00+00:00');

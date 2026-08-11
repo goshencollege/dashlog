@@ -3,6 +3,7 @@
 namespace App\Service;
 
 use App\Dto\IngestedLogLine;
+use App\Entity\LogObject;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -12,6 +13,13 @@ use Psr\Log\LoggerInterface;
  * through, which is what keeps adding a new transport cheap: it only needs
  * to produce IngestedLogLine values and call ingest().
  *
+ * Two separate flush paths, matching LogBatchWriter's split:
+ *
+ *  - flushForVisibility() records newly-arrived lines as LogEntry rows
+ *    (browsable immediately) without waiting for their window to close.
+ *  - flushExpiredWindows() closes out windows once they're done, building
+ *    the actual storage object from everything the window received.
+ *
  * The buffer is in-process only — a crash loses whatever window hasn't
  * closed yet, and a failed flush just leaves a window buffered for the next
  * attempt rather than dropping it. Durable buffering across restarts/backend
@@ -20,7 +28,7 @@ use Psr\Log\LoggerInterface;
  */
 class LogIngestor
 {
-    /** @var array<string, array<string, array{start: \DateTimeImmutable, end: \DateTimeImmutable, lines: IngestedLogLine[]}>> */
+    /** @var array<string, array<string, array{start: \DateTimeImmutable, end: \DateTimeImmutable, logObject: LogObject|null, lines: IngestedLogLine[], pendingEntryLines: IngestedLogLine[]}>> */
     private array $buffers = [];
 
     public function __construct(
@@ -39,21 +47,70 @@ class LogIngestor
         $bucket ??= [
             'start' => $windowStart,
             'end' => $this->windowCalculator->windowEndFor($windowStart),
+            'logObject' => null,
             'lines' => [],
+            'pendingEntryLines' => [],
         ];
         $bucket['lines'][] = $line;
+        $bucket['pendingEntryLines'][] = $line;
+    }
+
+    /**
+     * Records whatever has arrived since the last call as LogEntry rows,
+     * so it's immediately browsable/searchable without waiting for its
+     * window to close. Meant to be called on a short, fixed interval (see
+     * SyslogListenCommand) — not per-line, to keep the write rate sane.
+     */
+    public function flushForVisibility(): void
+    {
+        foreach ($this->buffers as $source => &$windows) {
+            foreach ($windows as &$bucket) {
+                if ($bucket['pendingEntryLines'] === []) {
+                    continue;
+                }
+
+                try {
+                    $bucket['logObject'] = $this->batchWriter->recordEntries(
+                        $source,
+                        $bucket['start'],
+                        $bucket['end'],
+                        $bucket['pendingEntryLines'],
+                        $bucket['logObject'],
+                    );
+                    $bucket['pendingEntryLines'] = [];
+                } catch (\Throwable $e) {
+                    $this->logger->error('Failed to record log entries for visibility, will retry next tick.', [
+                        'source' => $source,
+                        'windowStart' => $bucket['start']->format(\DateTimeInterface::ATOM),
+                        'exception' => $e,
+                    ]);
+                }
+            }
+        }
+        unset($windows, $bucket);
     }
 
     public function flushExpiredWindows(\DateTimeImmutable $now, int $graceSeconds = 30): void
     {
-        foreach ($this->buffers as $source => $windows) {
-            foreach ($windows as $windowKey => $bucket) {
+        foreach ($this->buffers as $source => &$windows) {
+            foreach ($windows as $windowKey => &$bucket) {
                 if ($now < $bucket['end']->modify("+{$graceSeconds} seconds")) {
                     continue;
                 }
 
                 try {
-                    $this->batchWriter->write($source, $bucket['start'], $bucket['end'], $bucket['lines']);
+                    if ($bucket['pendingEntryLines'] !== []) {
+                        $bucket['logObject'] = $this->batchWriter->recordEntries(
+                            $source,
+                            $bucket['start'],
+                            $bucket['end'],
+                            $bucket['pendingEntryLines'],
+                            $bucket['logObject'],
+                        );
+                        $bucket['pendingEntryLines'] = [];
+                    }
+
+                    $this->batchWriter->finalize($source, $bucket['start'], $bucket['end'], $bucket['lines'], $bucket['logObject']);
                     unset($this->buffers[$source][$windowKey]);
                 } catch (\Throwable $e) {
                     $this->logger->error('Failed to flush log batch, will retry next tick.', [
@@ -68,6 +125,7 @@ class LogIngestor
                 unset($this->buffers[$source]);
             }
         }
+        unset($windows, $bucket);
     }
 
     public function flushAll(\DateTimeImmutable $now): void

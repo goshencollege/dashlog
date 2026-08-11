@@ -91,6 +91,29 @@ class SpoolDrainServiceTest extends KernelTestCase
         self::assertCount(0, $this->em->getRepository(LogObject::class)->findAll());
     }
 
+    public function testPendingObjectOnSpoolIsLeftAlone(): void
+    {
+        $this->makeRealBackend();
+
+        $logObject = new LogObject();
+        $logObject->setStorageBackend($this->spool);
+        $logObject->setObjectKey('web-01/2026/08/11/14-15.log.gz');
+        $logObject->setSource('web-01');
+        $logObject->setWindowStart(new \DateTimeImmutable('2026-08-11T14:15:00+00:00'));
+        $logObject->setWindowEnd(new \DateTimeImmutable('2026-08-11T14:15:00+00:00'));
+        $logObject->setSizeBytes(0);
+        $logObject->setEntryCount(1);
+        $logObject->setStatus('pending');
+        $this->em->persist($logObject);
+        $this->em->flush();
+
+        // Must not throw trying to read bytes that don't exist yet.
+        $this->drainService->run();
+
+        self::assertTrue($logObject->getStorageBackend()->isSpool());
+        self::assertSame('pending', $logObject->getStatus());
+    }
+
     private function writeToSpool(string $key, string $content, string $status): LogObject
     {
         $this->storageService->write($this->spool, $key, $content);

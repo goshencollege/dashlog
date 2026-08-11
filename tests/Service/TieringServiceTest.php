@@ -85,6 +85,28 @@ class TieringServiceTest extends KernelTestCase
         self::assertSame($this->cold->getId(), $logObject->getStorageBackend()->getId());
     }
 
+    public function testPendingObjectIsNeverTieredEvenIfOld(): void
+    {
+        $now = new \DateTimeImmutable('2026-08-11T00:00:00+00:00');
+
+        $logObject = new LogObject();
+        $logObject->setStorageBackend($this->hot);
+        $logObject->setObjectKey('web-01/2026/08/09/00-00.log.gz');
+        $logObject->setSource('web-01');
+        $logObject->setWindowStart($now->modify('-3 days'));
+        $logObject->setWindowEnd($now->modify('-3 days'));
+        $logObject->setSizeBytes(0);
+        $logObject->setEntryCount(1);
+        $logObject->setStatus('pending');
+        $this->em->persist($logObject);
+        $this->em->flush();
+
+        $this->tieringService->run($now);
+
+        self::assertSame($this->hot->getId(), $logObject->getStorageBackend()->getId());
+        self::assertSame('pending', $logObject->getStatus());
+    }
+
     private function writeObject(StorageBackend $backend, string $key, string $content, \DateTimeImmutable $windowEnd): LogObject
     {
         $this->storageService->write($backend, $key, $content);

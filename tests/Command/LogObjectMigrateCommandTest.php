@@ -84,6 +84,32 @@ class LogObjectMigrateCommandTest extends KernelTestCase
         self::assertTrue($this->storageService->exists($this->source, 'web-01/2026/08/11/14-15.log.gz'));
     }
 
+    public function testPendingObjectsAreExcludedFromBulkMigration(): void
+    {
+        $movable = $this->writeObject($this->source, 'web-01/2026/08/11/14-15.log.gz', 'one');
+
+        $pending = new LogObject();
+        $pending->setStorageBackend($this->source);
+        $pending->setObjectKey('web-02/2026/08/11/14-15.log.gz');
+        $pending->setSource('web-02');
+        $pending->setWindowStart(new \DateTimeImmutable('2026-08-11T14:15:00+00:00'));
+        $pending->setWindowEnd(new \DateTimeImmutable('2026-08-11T14:15:00+00:00'));
+        $pending->setSizeBytes(0);
+        $pending->setEntryCount(1);
+        $pending->setStatus('pending');
+        $this->em->persist($pending);
+        $this->em->flush();
+
+        $exitCode = $this->tester->execute([
+            '--from' => (string) $this->source->getId(),
+            '--to' => (string) $this->destination->getId(),
+        ]);
+
+        self::assertSame(0, $exitCode);
+        self::assertSame($this->destination->getId(), $movable->getStorageBackend()->getId());
+        self::assertSame($this->source->getId(), $pending->getStorageBackend()->getId(), 'the pending object must be left alone');
+    }
+
     public function testUnknownBackendIdFails(): void
     {
         $exitCode = $this->tester->execute([

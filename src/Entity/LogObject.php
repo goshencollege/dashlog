@@ -53,8 +53,14 @@ class LogObject
     #[ORM\Column(nullable: true)]
     private ?int $entryCount = null;
 
+    // pending: entries recorded for browse/search, but no bytes written to
+    //          storage yet — never touch a pending object from tiering,
+    //          draining, or manual migration, there's nothing there to move.
+    // staged: written to the write-ahead spool, not yet on a real backend.
+    // stored: on a real backend.
+    // migrating / error: mid-move or failed, see LogObjectMigrationService.
     #[ORM\Column(length: 20)]
-    private string $status = 'staged';
+    private string $status = 'pending';
 
     #[ORM\Column(type: 'text', nullable: true)]
     private ?string $lastError = null;

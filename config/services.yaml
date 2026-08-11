@@ -3,6 +3,7 @@
 parameters:
     default_log_spool_path: '%kernel.project_dir%/var/log-spool'
     default_log_browse_page_size: 50
+    default_log_visibility_flush_seconds: 5
 
 services:
     _defaults:
@@ -34,6 +35,10 @@ services:
     App\Controller\DashboardController:
         arguments:
             $logBrowsePageSize: '%env(int:default:default_log_browse_page_size:LOG_BROWSE_PAGE_SIZE)%'
+
+    App\Command\SyslogListenCommand:
+        arguments:
+            $visibilityFlushSeconds: '%env(int:default:default_log_visibility_flush_seconds:LOG_VISIBILITY_FLUSH_SECONDS)%'
 
     Symfony\Component\HttpFoundation\Session\Storage\Handler\PdoSessionHandler:
         arguments:

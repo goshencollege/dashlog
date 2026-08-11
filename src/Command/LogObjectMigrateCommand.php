@@ -67,7 +67,7 @@ class LogObjectMigrateCommand extends Command
             return Command::FAILURE;
         }
 
-        $objects = $this->logObjectRepository->findBy(['storageBackend' => $source]);
+        $objects = $this->logObjectRepository->findMovableOnBackend($source);
         if ($objects === []) {
             $io->success("Nothing to migrate — no log objects found on \"{$source->getName()}\".");
 
