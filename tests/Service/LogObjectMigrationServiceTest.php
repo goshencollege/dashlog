@@ -92,6 +92,25 @@ class LogObjectMigrationServiceTest extends KernelTestCase
         }
     }
 
+    public function testMigratingAPendingObjectThrows(): void
+    {
+        $logObject = new LogObject();
+        $logObject->setStorageBackend($this->source);
+        $logObject->setObjectKey('web-01/2026/08/11/14-15.log.gz');
+        $logObject->setSource('web-01');
+        $logObject->setWindowStart(new \DateTimeImmutable('2026-08-11T14:15:00+00:00'));
+        $logObject->setWindowEnd(new \DateTimeImmutable('2026-08-11T14:15:00+00:00'));
+        $logObject->setSizeBytes(0);
+        $logObject->setEntryCount(1);
+        $logObject->setStatus('pending');
+        $this->em->persist($logObject);
+        $this->em->flush();
+
+        $this->expectException(\LogicException::class);
+
+        $this->migrationService->migrate($logObject, $this->destination);
+    }
+
     private function writeObject(StorageBackend $backend, string $key, string $content): LogObject
     {
         $this->storageService->write($backend, $key, $content);

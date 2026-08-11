@@ -8,12 +8,14 @@ use Psr\Log\LoggerInterface;
 
 /**
  * Moves everything currently sitting on the write-ahead spool to the
- * hottest active real backend, regardless of a LogObject's current status —
- * anything found on the spool by definition still needs to leave it,
- * whether it's freshly staged, stuck 'error' from a prior failed drain, or
- * even 'stored' (e.g. rediscovered there by reconciliation after a catalog
- * loss). Runs frequently so spool residency stays brief under normal
- * operation; only lingers if no real backend is currently reachable.
+ * hottest active real backend, regardless of a LogObject's current status
+ * — other than 'pending' (entries recorded for visibility, but no bytes
+ * written yet; there's nothing there to move). Anything else found on the
+ * spool by definition still needs to leave it, whether it's freshly
+ * staged, stuck 'error' from a prior failed drain, or even 'stored' (e.g.
+ * rediscovered there by reconciliation after a catalog loss). Runs
+ * frequently so spool residency stays brief under normal operation; only
+ * lingers if no real backend is currently reachable.
  */
 class SpoolDrainService
 {
@@ -29,7 +31,7 @@ class SpoolDrainService
     public function run(): void
     {
         $spool = $this->spoolProvider->getSpool();
-        $staged = $this->logObjectRepository->findBy(['storageBackend' => $spool]);
+        $staged = $this->logObjectRepository->findMovableOnBackend($spool);
 
         if ($staged === []) {
             return;

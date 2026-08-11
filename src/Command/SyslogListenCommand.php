@@ -22,6 +22,7 @@ class SyslogListenCommand extends Command
         private readonly SyslogMessageParser $parser,
         private readonly LogIngestor $ingestor,
         private readonly LoggerInterface $logger,
+        private readonly int $visibilityFlushSeconds,
     ) {
         parent::__construct();
     }
@@ -50,6 +51,8 @@ class SyslogListenCommand extends Command
 
         $io->success("Listening for syslog messages on udp://{$host}:{$port}");
 
+        $lastVisibilityFlush = null;
+
         // Runs until killed. stream_select's timeout doubles as the tick that
         // drives flushExpiredWindows even during quiet periods with no traffic.
         while (true) {
@@ -73,8 +76,22 @@ class SyslogListenCommand extends Command
                 }
             }
 
+            $now = new \DateTimeImmutable();
+
+            // Make recently-arrived lines browsable well before their window
+            // closes, on a coarser interval than the per-second select tick
+            // so this doesn't turn into a write per line.
+            if ($lastVisibilityFlush === null || $now >= $lastVisibilityFlush->modify("+{$this->visibilityFlushSeconds} seconds")) {
+                try {
+                    $this->ingestor->flushForVisibility();
+                } catch (\Throwable $e) {
+                    $this->logger->error('Unexpected error while flushing log entries for visibility.', ['exception' => $e]);
+                }
+                $lastVisibilityFlush = $now;
+            }
+
             try {
-                $this->ingestor->flushExpiredWindows(new \DateTimeImmutable());
+                $this->ingestor->flushExpiredWindows($now);
             } catch (\Throwable $e) {
                 $this->logger->error('Unexpected error while flushing log batches.', ['exception' => $e]);
             }

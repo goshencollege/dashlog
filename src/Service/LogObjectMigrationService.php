@@ -28,6 +28,17 @@ class LogObjectMigrationService
 
     public function migrate(LogObject $logObject, StorageBackend $destination): void
     {
+        if ($logObject->getStatus() === 'pending') {
+            // Entries recorded for visibility, but no bytes written to
+            // storage yet — there's nothing to copy. Callers are expected to
+            // filter these out already (LogObjectRepository::findMovableOnBackend());
+            // this is a defensive backstop, not the primary guard.
+            throw new \LogicException(sprintf(
+                'Cannot migrate log object "%s": it is still pending, nothing has been written to storage for it yet.',
+                $logObject->getObjectKey(),
+            ));
+        }
+
         $source = $logObject->getStorageBackend();
         if ($source->getId() === $destination->getId()) {
             return;
