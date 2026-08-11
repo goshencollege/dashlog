@@ -18,4 +18,10 @@ class StorageBackendRepository extends ServiceEntityRepository
     {
         return $this->findBy(['isActive' => true]);
     }
+
+    /** @return StorageBackend[] hottest (lowest tierRank) first */
+    public function findActiveOrderedByTier(): array
+    {
+        return $this->findBy(['isActive' => true], ['tierRank' => 'ASC']);
+    }
 }

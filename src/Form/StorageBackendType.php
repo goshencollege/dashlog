@@ -7,6 +7,7 @@ use App\Enum\StorageBackendType as StorageBackendTypeEnum;
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\Extension\Core\Type\CheckboxType;
 use Symfony\Component\Form\Extension\Core\Type\EnumType;
+use Symfony\Component\Form\Extension\Core\Type\IntegerType;
 use Symfony\Component\Form\Extension\Core\Type\PasswordType;
 use Symfony\Component\Form\Extension\Core\Type\TextType;
 use Symfony\Component\Form\FormBuilderInterface;
@@ -33,6 +34,16 @@ class StorageBackendType extends AbstractType
                 'label'    => 'Active',
                 'required' => false,
                 'help'     => 'Active backends may be used as a log storage destination. Multiple backends may be active at once.',
+            ])
+            ->add('tierRank', IntegerType::class, [
+                'label' => 'Tier Rank',
+                'help'  => 'Lower ranks are treated as hotter/faster. New logs are written to the lowest-ranked active backend; aging logs migrate toward higher ranks.',
+            ])
+            ->add('maxAgeDays', IntegerType::class, [
+                'label'    => 'Max Age (days)',
+                'required' => false,
+                'attr'     => ['placeholder' => '(never auto-migrate away from this backend)'],
+                'help'     => 'Once a log is older than this, it is automatically migrated to the next active backend by tier rank. Leave blank for backends that should keep logs indefinitely.',
             ])
 
             // Local

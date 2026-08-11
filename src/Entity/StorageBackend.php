@@ -31,6 +31,15 @@ class StorageBackend
     #[ORM\Column]
     private bool $isActive = true;
 
+    // Tiering: lower tierRank = hotter/faster. LogObjects are auto-migrated to
+    // the next active backend by rank once they're older than maxAgeDays on
+    // their current backend; null means "never auto-tier away from here".
+    #[ORM\Column]
+    private int $tierRank = 0;
+
+    #[ORM\Column(nullable: true)]
+    private ?int $maxAgeDays = null;
+
     // Local
     #[ORM\Column(length: 1024, nullable: true)]
     private ?string $path = null;
@@ -104,6 +113,12 @@ class StorageBackend
 
     public function isActive(): bool { return $this->isActive; }
     public function setIsActive(bool $isActive): static { $this->isActive = $isActive; return $this; }
+
+    public function getTierRank(): int { return $this->tierRank; }
+    public function setTierRank(int $tierRank): static { $this->tierRank = $tierRank; return $this; }
+
+    public function getMaxAgeDays(): ?int { return $this->maxAgeDays; }
+    public function setMaxAgeDays(?int $maxAgeDays): static { $this->maxAgeDays = $maxAgeDays; return $this; }
 
     public function getPath(): ?string { return $this->path; }
     public function setPath(?string $path): static { $this->path = $path; return $this; }
