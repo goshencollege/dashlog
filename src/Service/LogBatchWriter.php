@@ -30,10 +30,7 @@ class LogBatchWriter
             return;
         }
 
-        // TODO(tiering): pick the hottest active backend by tier rank once
-        // StorageBackend has one; for now everything lands on whichever
-        // active backend happens to be first.
-        $backend = $this->storageBackendRepository->findActive()[0] ?? null;
+        $backend = $this->storageBackendRepository->findActiveOrderedByTier()[0] ?? null;
         if ($backend === null) {
             throw new \RuntimeException('No active storage backend is configured; cannot write log batch.');
         }
@@ -69,8 +66,7 @@ class LogBatchWriter
         $logObject->setStorageBackend($backend);
         $logObject->setObjectKey($key);
         $logObject->setSource($source);
-        // TODO(tiering): snapshot the backend's real tier once StorageBackend has one.
-        $logObject->setTier('unassigned');
+        $logObject->setTierRank($backend->getTierRank());
         $logObject->setWindowStart($windowStart);
         $logObject->setWindowEnd($windowEnd);
         $logObject->setSizeBytes(strlen($gzipped));

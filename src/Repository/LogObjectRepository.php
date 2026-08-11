@@ -18,4 +18,16 @@ class LogObjectRepository extends ServiceEntityRepository
     {
         return $this->findOneBy(['storageBackend' => $backend, 'objectKey' => $objectKey]);
     }
+
+    /** @return LogObject[] */
+    public function findEligibleForTiering(StorageBackend $backend, \DateTimeImmutable $cutoff): array
+    {
+        return $this->createQueryBuilder('l')
+            ->where('l.storageBackend = :backend')
+            ->andWhere('l.windowEnd < :cutoff')
+            ->setParameter('backend', $backend)
+            ->setParameter('cutoff', $cutoff)
+            ->getQuery()
+            ->getResult();
+    }
 }

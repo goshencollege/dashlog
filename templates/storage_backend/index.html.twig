@@ -23,6 +23,7 @@
                     <tr>
                         <th>Name</th>
                         <th>Type</th>
+                        <th>Tier</th>
                         <th>Status</th>
                         <th>Last Check</th>
                         <th class="text-end">Actions</th>
@@ -34,6 +35,12 @@
                         <td class="align-middle fw-semibold">{{ backend.name }}</td>
                         <td class="align-middle">
                             <span class="badge bg-secondary-subtle text-secondary-emphasis border">{{ backend.type.label }}</span>
+                        </td>
+                        <td class="align-middle">
+                            <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle">Rank {{ backend.tierRank }}</span>
+                            {% if backend.maxAgeDays is not null %}
+                                <div class="text-muted small">max {{ backend.maxAgeDays }}d</div>
+                            {% endif %}
                         </td>
                         <td class="align-middle">
                             {% if backend.isActive %}

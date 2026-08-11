@@ -60,10 +60,10 @@ services:
         max-size: "20m"
         max-file: "5"
 
-  # Handles async jobs (e.g. log ingestion, scheduled analysis) and their failed-message retries.
+  # Handles async jobs, the tiering schedule, and failed-message retries.
   worker:
     <<: *worker-base
-    command: ["php", "bin/console", "messenger:consume", "async", "failed", "--time-limit=3600"]
+    command: ["php", "bin/console", "messenger:consume", "async", "failed", "scheduler_tiering", "--time-limit=3600"]
 
   # Receives syslog messages over UDP and batches/stores them.
   syslog:

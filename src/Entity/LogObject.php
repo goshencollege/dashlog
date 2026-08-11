@@ -32,8 +32,11 @@ class LogObject
     #[ORM\Column(length: 255)]
     private string $source = '';
 
-    #[ORM\Column(length: 20)]
-    private string $tier = '';
+    // Snapshot of the backend's tierRank at the time this object was written
+    // there (kept in sync on migration) — not a live join, so it stays
+    // accurate even if the backend's own rank changes later.
+    #[ORM\Column]
+    private int $tierRank = 0;
 
     #[ORM\Column]
     private \DateTimeImmutable $windowStart;
@@ -73,8 +76,8 @@ class LogObject
     public function getSource(): string { return $this->source; }
     public function setSource(string $source): static { $this->source = $source; return $this; }
 
-    public function getTier(): string { return $this->tier; }
-    public function setTier(string $tier): static { $this->tier = $tier; return $this; }
+    public function getTierRank(): int { return $this->tierRank; }
+    public function setTierRank(int $tierRank): static { $this->tierRank = $tierRank; return $this; }
 
     public function getWindowStart(): \DateTimeImmutable { return $this->windowStart; }
     public function setWindowStart(\DateTimeImmutable $windowStart): static { $this->windowStart = $windowStart; return $this; }

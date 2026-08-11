@@ -46,6 +46,28 @@
         </div>
     </div>
 
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header"><strong>Tiering</strong></div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-lg-4">
+                        {{ form_label(form.tierRank, null, {label_attr: {class: 'form-label fw-semibold'}}) }}
+                        {{ form_widget(form.tierRank, {attr: {class: 'form-control'}}) }}
+                        {{ form_errors(form.tierRank) }}
+                        {{ form_help(form.tierRank) }}
+                    </div>
+                    <div class="col-lg-4">
+                        {{ form_label(form.maxAgeDays, null, {label_attr: {class: 'form-label fw-semibold'}}) }}
+                        {{ form_widget(form.maxAgeDays, {attr: {class: 'form-control'}}) }}
+                        {{ form_errors(form.maxAgeDays) }}
+                        {{ form_help(form.maxAgeDays) }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="col-12 backend-type-section" data-type="local">
         <div class="card">
             <div class="card-header"><strong>Local Directory</strong></div>
