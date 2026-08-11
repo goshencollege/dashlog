@@ -64,27 +64,54 @@ class DashboardController extends AbstractController
         ]);
     }
 
-    /** @return array{0: array<string, mixed>, 1: array<string, string>} */
+    /**
+     * Known sources matching a substring, for the browse page's source
+     * multi-select to search against as the user types.
+     */
+    #[Route('/logs/sources', name: 'log_sources', methods: ['GET'])]
+    public function sources(Request $request, LogEntryRepository $repo): JsonResponse
+    {
+        $query = trim((string) $request->query->get('q', ''));
+
+        return $this->json($repo->findDistinctSources($query));
+    }
+
+    /** @return array{0: array<string, mixed>, 1: array{source: string[], q: string, severity: int[], from: string, to: string}} */
     private function parseFilters(Request $request): array
     {
-        $sourceParam = trim((string) $request->query->get('source', ''));
+        $sourceParams = array_values(array_unique(array_filter(
+            array_map(static fn ($value) => trim((string) $value), $request->query->all('source')),
+            static fn (string $value) => $value !== '',
+        )));
+        $severityParams = array_values(array_unique(array_map('intval', array_filter(
+            array_map(static fn ($value) => trim((string) $value), $request->query->all('severity')),
+            static fn (string $value) => $value !== '',
+        ))));
         $messageParam = trim((string) $request->query->get('q', ''));
-        $severityParam = (string) $request->query->get('severity', '');
         $fromParam = (string) $request->query->get('from', '');
         $toParam = (string) $request->query->get('to', '');
 
-        $filters = array_filter([
-            'source' => $sourceParam,
-            'severity' => $severityParam !== '' ? (int) $severityParam : null,
-            'message' => $messageParam,
-            'from' => $this->parseDateTime($fromParam),
-            'to' => $this->parseDateTime($toParam),
-        ], static fn ($value) => $value !== null && $value !== '');
+        $filters = [];
+        if ($sourceParams !== []) {
+            $filters['source'] = $sourceParams;
+        }
+        if ($severityParams !== []) {
+            $filters['severity'] = $severityParams;
+        }
+        if ($messageParam !== '') {
+            $filters['message'] = $messageParam;
+        }
+        if (($from = $this->parseDateTime($fromParam)) !== null) {
+            $filters['from'] = $from;
+        }
+        if (($to = $this->parseDateTime($toParam)) !== null) {
+            $filters['to'] = $to;
+        }
 
         $rawFilters = [
-            'source' => $sourceParam,
+            'source' => $sourceParams,
             'q' => $messageParam,
-            'severity' => $severityParam,
+            'severity' => $severityParams,
             'from' => $fromParam,
             'to' => $toParam,
         ];

@@ -3,6 +3,10 @@
 {% block title %}Logs{% endblock %}
 {% block body_class %}page-list-view{% endblock %}
 
+{% block stylesheets %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css">
+{% endblock %}
+
 {% block page_styles %}
 <style>
     .live-dot {
@@ -24,6 +28,46 @@
     @keyframes log-row-highlight {
         0% { background-color: rgba(25, 135, 84, .15); }
         100% { background-color: transparent; }
+    }
+
+    /* TomSelect ships a light-only theme; retarget its hardcoded colors at
+       Bootstrap's own CSS variables so it follows dark mode and the
+       purple/green/rainbow accent themes instead of fighting them. */
+    .ts-dropdown,
+    .ts-control,
+    .ts-control input {
+        color: var(--bs-body-color);
+    }
+    .ts-control {
+        background-color: var(--bs-body-bg);
+    }
+    .ts-control input::placeholder {
+        color: var(--bs-secondary-color);
+    }
+    .ts-dropdown {
+        border-color: var(--bs-border-color);
+    }
+    .ts-dropdown .optgroup-header {
+        color: var(--bs-secondary-color);
+    }
+    .ts-wrapper.multi .ts-control > div {
+        background: var(--bs-tertiary-bg);
+        color: var(--bs-body-color);
+        border-color: var(--bs-border-color);
+    }
+    .ts-wrapper.multi .ts-control > div.active {
+        background: var(--bs-primary);
+        color: #fff;
+    }
+    .ts-wrapper.plugin-remove_button .item .remove {
+        border-left-color: var(--bs-border-color);
+    }
+    .ts-wrapper.plugin-remove_button .item .remove:hover {
+        background: rgba(var(--bs-body-color-rgb), .08);
+    }
+    .focus .ts-control {
+        border-color: var(--bs-primary);
+        box-shadow: 0 0 0 .25rem rgba(var(--bs-primary-rgb), .25);
     }
 </style>
 {% endblock %}
@@ -47,20 +91,23 @@
         </div>
 
         <form method="get" class="row g-2 mb-3 align-items-end">
-            <div class="col-md-2">
+            <div class="col-md-3">
                 <label class="form-label small mb-1">Source</label>
-                <input type="text" name="source" value="{{ filters.source }}" class="form-control form-control-sm" placeholder="e.g. web-01">
-            </div>
-            <div class="col-md-2">
-                <label class="form-label small mb-1">Severity</label>
-                <select name="severity" class="form-select form-select-sm">
-                    <option value="">Any</option>
-                    {% for severity in severities %}
-                        <option value="{{ severity.value }}" {{ filters.severity == severity.value ? 'selected' }}>{{ severity.label() }}</option>
+                <select id="source-select" name="source[]" multiple class="form-select form-select-sm">
+                    {% for source in filters.source %}
+                        <option value="{{ source }}" selected>{{ source }}</option>
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
+                <label class="form-label small mb-1">Severity</label>
+                <select id="severity-select" name="severity[]" multiple class="form-select form-select-sm">
+                    {% for severity in severities %}
+                        <option value="{{ severity.value }}" {{ severity.value in filters.severity ? 'selected' }}>{{ severity.label() }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
                 <label class="form-label small mb-1">Message contains</label>
                 <input type="text" name="q" value="{{ filters.q }}" class="form-control form-control-sm" placeholder="search text">
             </div>
@@ -143,6 +190,30 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+<script>
+(function () {
+    new TomSelect('#source-select', {
+        plugins: ['remove_button'],
+        valueField: 'source',
+        labelField: 'source',
+        searchField: 'source',
+        create: false,
+        maxOptions: 50,
+        preload: true,
+        load: function (query, callback) {
+            fetch('{{ path('log_sources') }}?q=' + encodeURIComponent(query))
+                .then(function (response) { return response.json(); })
+                .then(function (sources) { callback(sources.map(function (s) { return {source: s}; })); })
+                .catch(function () { callback(); });
+        },
+    });
+    new TomSelect('#severity-select', {
+        plugins: ['remove_button'],
+        create: false,
+    });
+})();
+</script>
 {% if page == 1 %}
 <script>
 (function () {
@@ -189,8 +260,11 @@
 
         var params = new URLSearchParams();
         Object.keys(currentFilters).forEach(function (key) {
-            if (currentFilters[key] !== '') {
-                params.set(key, currentFilters[key]);
+            var value = currentFilters[key];
+            if (Array.isArray(value)) {
+                value.forEach(function (v) { params.append(key + '[]', v); });
+            } else if (value !== '') {
+                params.set(key, value);
             }
         });
         params.set('sinceId', lastId);
