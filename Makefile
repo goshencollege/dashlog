@@ -62,7 +62,7 @@ test-setup: .env.test.local
 	docker compose -f $(COMPOSE) exec -T app php bin/console doctrine:migrations:migrate --env=test --no-interaction --allow-no-migration
 
 test: .env.test.local
-	docker compose -f $(COMPOSE) exec -T app php vendor/bin/phpunit
+	docker compose -f $(COMPOSE) exec -T -e APP_ENV=test app php vendor/bin/phpunit
 
 cert:
 	mkdir -p docker/ssl
