@@ -26,4 +26,5 @@ security:
         - { path: ^/saml/, roles: PUBLIC_ACCESS }
         - { path: ^/saml-providers, roles: ROLE_ADMIN }
         - { path: ^/storage-backends, roles: ROLE_ADMIN }
+        - { path: ^/health, roles: ROLE_ADMIN }
         - { path: ^/, roles: ROLE_USER }
