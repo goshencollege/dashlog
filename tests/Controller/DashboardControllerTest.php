@@ -121,12 +121,47 @@ class DashboardControllerTest extends WebTestCase
         $this->makeEntry('web-01', 5, 'from web', new \DateTimeImmutable());
         $this->makeEntry('db-01', 5, 'from db', new \DateTimeImmutable());
 
-        $crawler = $client->request('GET', '/', ['source' => 'web']);
+        $crawler = $client->request('GET', '/', ['source' => ['web-01']]);
 
         self::assertResponseIsSuccessful();
         self::assertSelectorTextContains('body', 'from web');
         self::assertSelectorTextNotContains('body', 'from db');
         self::assertSelectorTextContains('body', '1 matching entry');
+    }
+
+    public function testFilterByMultipleSourcesMatchesAny(): void
+    {
+        $client = $this->loginAsUser();
+        $this->makeEntry('web-01', 5, 'from web 01', new \DateTimeImmutable());
+        $this->makeEntry('web-02', 5, 'from web 02', new \DateTimeImmutable());
+        $this->makeEntry('db-01', 5, 'from db', new \DateTimeImmutable());
+
+        $client->request('GET', '/', ['source' => ['web-01', 'web-02']]);
+
+        self::assertResponseIsSuccessful();
+        self::assertSelectorTextContains('body', 'from web 01');
+        self::assertSelectorTextContains('body', 'from web 02');
+        self::assertSelectorTextNotContains('body', 'from db');
+        self::assertSelectorTextContains('body', '2 matching entries');
+    }
+
+    public function testSourcesEndpointRequiresAuth(): void
+    {
+        $this->client->request('GET', '/logs/sources');
+
+        self::assertResponseRedirects('/saml/login');
+    }
+
+    public function testSourcesEndpointReturnsMatchingKnownSources(): void
+    {
+        $client = $this->loginAsUser();
+        $this->makeEntry('web-01', 5, 'a', new \DateTimeImmutable());
+        $this->makeEntry('db-01', 5, 'b', new \DateTimeImmutable());
+
+        $client->request('GET', '/logs/sources', ['q' => 'web']);
+
+        self::assertResponseIsSuccessful();
+        self::assertSame(['web-01'], json_decode($client->getResponse()->getContent(), true));
     }
 
     public function testFilterBySeverityNarrowsResults(): void
@@ -212,7 +247,7 @@ class DashboardControllerTest extends WebTestCase
         $this->makeEntry('web-01', 5, 'from web', new \DateTimeImmutable());
         $this->makeEntry('db-01', 5, 'from db', new \DateTimeImmutable());
 
-        $client->request('GET', '/logs/updates', ['source' => 'web']);
+        $client->request('GET', '/logs/updates', ['source' => ['web-01']]);
 
         $payload = json_decode($client->getResponse()->getContent(), true);
         self::assertCount(1, $payload['entries']);

@@ -57,15 +57,45 @@ class LogEntryRepositoryTest extends KernelTestCase
         self::assertSame('first', $result['results'][1]->getMessage());
     }
 
-    public function testFilterBySourceIsPartialMatch(): void
+    public function testFilterBySourceIsExactMatch(): void
     {
         $this->makeEntry('web-01', 5, 'a', new \DateTimeImmutable());
-        $this->makeEntry('db-01', 5, 'b', new \DateTimeImmutable());
+        $this->makeEntry('web-011', 5, 'b', new \DateTimeImmutable());
 
-        $result = $this->repo->search(['source' => 'web'], 1, 50);
+        $result = $this->repo->search(['source' => ['web-01']], 1, 50);
 
         self::assertSame(1, $result['total']);
         self::assertSame('web-01', $result['results'][0]->getSource());
+    }
+
+    public function testFilterBySourceMatchesAnyOfMultipleSelectedValues(): void
+    {
+        $this->makeEntry('web-01', 5, 'a', new \DateTimeImmutable());
+        $this->makeEntry('web-02', 5, 'b', new \DateTimeImmutable());
+        $this->makeEntry('db-01', 5, 'c', new \DateTimeImmutable());
+
+        $result = $this->repo->search(['source' => ['web-01', 'web-02']], 1, 50);
+
+        self::assertSame(2, $result['total']);
+    }
+
+    public function testFindDistinctSourcesFiltersBySubstringAndOrdersAlphabetically(): void
+    {
+        $this->makeEntry('web-02', 5, 'a', new \DateTimeImmutable());
+        $this->makeEntry('web-01', 5, 'b', new \DateTimeImmutable());
+        $this->makeEntry('db-01', 5, 'c', new \DateTimeImmutable());
+
+        self::assertSame(['web-01', 'web-02'], $this->repo->findDistinctSources('web'));
+        self::assertSame(['db-01', 'web-01', 'web-02'], $this->repo->findDistinctSources(''));
+    }
+
+    public function testFindDistinctSourcesDeduplicatesAndRespectsLimit(): void
+    {
+        $this->makeEntry('web-01', 5, 'a', new \DateTimeImmutable());
+        $this->makeEntry('web-01', 5, 'b', new \DateTimeImmutable());
+        $this->makeEntry('web-02', 5, 'c', new \DateTimeImmutable());
+
+        self::assertSame(['web-01'], $this->repo->findDistinctSources('', 1));
     }
 
     public function testFilterBySeverityIsExactMatch(): void
