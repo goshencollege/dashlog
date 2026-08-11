@@ -292,6 +292,12 @@
                                 <i class="bi bi-hdd-network me-1"></i>Storage Backends
                             </a>
                         </li>
+                        <li>
+                            <a class="dropdown-item {{ app.request.attributes.get('_route') starts with 'health' ? 'active' }}"
+                               href="{{ path('health_index') }}">
+                                <i class="bi bi-heart-pulse me-1"></i>Health
+                            </a>
+                        </li>
                     </ul>
                 </li>
                 {% endif %}

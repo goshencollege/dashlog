@@ -1,0 +1,190 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Health{% endblock %}
+
+{% set hasIssues = not health.hasActiveBackend or health.spoolBacklogCount > 0 or health.catalogErrors is not empty or health.failedMessageCount > 0 %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="bi bi-heart-pulse me-2"></i>Health</h1>
+    <a href="{{ path('health_index') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+    </a>
+</div>
+
+{% if hasIssues %}
+    <div class="alert alert-danger d-flex align-items-center">
+        <i class="bi bi-exclamation-triangle-fill me-2 fs-4"></i>
+        <div>Issues found — see below.</div>
+    </div>
+{% else %}
+    <div class="alert alert-success d-flex align-items-center">
+        <i class="bi bi-check-circle-fill me-2 fs-4"></i>
+        <div>All systems healthy.</div>
+    </div>
+{% endif %}
+
+<div class="row g-4">
+
+    <div class="col-12 col-lg-6">
+        <div class="card h-100">
+            <div class="card-header"><strong>Storage Backends</strong></div>
+            <div class="card-body">
+                {% if not health.hasActiveBackend %}
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                        No active storage backend is configured. Nothing can drain off the write-ahead spool until at least one is active.
+                    </div>
+                {% endif %}
+                {% if health.backends is empty %}
+                    <p class="text-muted mb-0">No storage backends configured yet.</p>
+                {% else %}
+                    <table class="table table-sm mb-0">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Active</th>
+                                <th>Last Check</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for backend in health.backends %}
+                            <tr>
+                                <td>{{ backend.name }}</td>
+                                <td>
+                                    {% if backend.isActive %}
+                                        <span class="badge bg-success">Active</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Inactive</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if backend.lastCheckedAt is null %}
+                                        <span class="badge bg-secondary-subtle text-secondary-emphasis border">Never tested</span>
+                                    {% elseif backend.lastCheckStatus == 'ok' %}
+                                        <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle" title="{{ backend.lastCheckMessage }}">OK</span>
+                                        <span class="text-muted small">{{ backend.lastCheckedAt|date('Y-m-d H:i') }}</span>
+                                    {% else %}
+                                        <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle" title="{{ backend.lastCheckMessage }}">Error</span>
+                                        <span class="text-muted small">{{ backend.lastCheckedAt|date('Y-m-d H:i') }}</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    <p class="text-muted small mt-2 mb-0">
+                        Status reflects the last manual "Test Connection" check on the
+                        <a href="{{ path('storage_backend_index') }}">Storage Backends</a> page, not a live probe.
+                    </p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-lg-6">
+        <div class="card h-100">
+            <div class="card-header"><strong>Write-Ahead Spool Backlog</strong></div>
+            <div class="card-body">
+                {% if health.spoolBacklogCount == 0 %}
+                    <p class="text-success mb-0"><i class="bi bi-check-circle me-1"></i>Nothing waiting to be drained.</p>
+                {% else %}
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                        {{ health.spoolBacklogCount }} object(s) currently on the spool, waiting to move to real storage.
+                        Oldest has been there since {{ health.oldestSpoolObject.createdAt|date('Y-m-d H:i') }}.
+                    </div>
+                    <table class="table table-sm mb-0">
+                        <thead>
+                            <tr>
+                                <th>Source</th>
+                                <th>Status</th>
+                                <th>Since</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for object in health.spoolObjects %}
+                            <tr>
+                                <td>{{ object.source }}</td>
+                                <td>
+                                    {% if object.status == 'error' %}
+                                        <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle" title="{{ object.lastError }}">Error</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary-subtle text-secondary-emphasis border">{{ object.status }}</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-muted small">{{ object.createdAt|date('Y-m-d H:i') }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-lg-6">
+        <div class="card h-100">
+            <div class="card-header"><strong>Catalog Errors</strong></div>
+            <div class="card-body">
+                {% if health.catalogErrors is empty %}
+                    <p class="text-success mb-0"><i class="bi bi-check-circle me-1"></i>No log objects in an error state.</p>
+                {% else %}
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                        {{ health.catalogErrors|length }} log object(s) failed to migrate and need attention.
+                    </div>
+                    <table class="table table-sm mb-0">
+                        <thead>
+                            <tr>
+                                <th>Source</th>
+                                <th>Backend</th>
+                                <th>Error</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for object in health.catalogErrors %}
+                            <tr>
+                                <td>{{ object.source }}</td>
+                                <td>{{ object.storageBackend.name }}</td>
+                                <td class="text-danger small" title="{{ object.lastError }}">
+                                    {{ object.lastError|length > 80 ? object.lastError|slice(0, 80) ~ '…' : object.lastError }}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-lg-6">
+        <div class="card h-100">
+            <div class="card-header"><strong>Ingestion &amp; Jobs</strong></div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-6">Last log received</dt>
+                    <dd class="col-6">
+                        {% if health.lastLogEntry is null %}
+                            <span class="text-muted">No logs received yet</span>
+                        {% else %}
+                            {{ health.lastLogEntry.createdAt|date('Y-m-d H:i:s') }}
+                        {% endif %}
+                    </dd>
+
+                    <dt class="col-6">Failed async jobs</dt>
+                    <dd class="col-6">
+                        {% if health.failedMessageCount == 0 %}
+                            <span class="text-success">0</span>
+                        {% else %}
+                            <span class="text-danger fw-semibold">{{ health.failedMessageCount }}</span>
+                        {% endif %}
+                    </dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
