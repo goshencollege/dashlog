@@ -65,6 +65,13 @@ services:
     <<: *worker-base
     command: ["php", "bin/console", "messenger:consume", "async", "failed", "--time-limit=3600"]
 
+  # Receives syslog messages over UDP and batches/stores them.
+  syslog:
+    <<: *worker-base
+    ports:
+      - "514:514/udp"
+    command: ["php", "bin/console", "app:syslog:listen"]
+
   nginx:
     image: nginx:alpine
     read_only: true

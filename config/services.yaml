@@ -9,6 +9,7 @@ services:
         resource: '../src/'
         exclude:
             - '../src/DataFixtures/'
+            - '../src/Dto/'
 
     App\Command\SamlImportMetadataCommand:
         arguments:
@@ -17,6 +18,10 @@ services:
     App\Service\EncryptionService:
         arguments:
             $encryptionKey: '%env(APP_ENCRYPTION_KEY)%'
+
+    App\Service\BatchWindowCalculator:
+        arguments:
+            $windowMinutes: '%env(int:LOG_BATCH_WINDOW_MINUTES)%'
 
     Symfony\Component\HttpFoundation\Session\Storage\Handler\PdoSessionHandler:
         arguments:
