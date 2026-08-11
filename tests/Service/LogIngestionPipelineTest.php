@@ -171,6 +171,50 @@ class LogIngestionPipelineTest extends KernelTestCase
         self::assertSame('staged', $logObject->getStatus());
     }
 
+    public function testSecondBurstLandingInAnAlreadyFlushedWindowMergesInsteadOfColliding(): void
+    {
+        // A source's traffic can split across a gap that straddles a window
+        // boundary: the window closes and flushes, then more lines for that
+        // *same* window arrive afterward. The second flush must not silently
+        // clobber the first's stored object while failing to update its
+        // catalog row (object_key is unique per backend) — that would leave
+        // the recorded checksum permanently wrong. This is exactly what
+        // happened with a real "minnesota" source once batching windows
+        // were shortened to 1 minute for faster local testing.
+        $windowStart = new \DateTimeImmutable('2026-08-11T14:15:00+00:00');
+
+        $this->ingestor->ingest(new IngestedLogLine(
+            source: 'minnesota', timestamp: $windowStart, host: 'minnesota', appName: 'Hostd',
+            procId: null, severity: 5, facility: 4, message: 'first burst', raw: 'first burst',
+        ));
+        $this->ingestor->flushAll(new \DateTimeImmutable('2026-08-11T14:16:00+00:00'));
+
+        $this->ingestor->ingest(new IngestedLogLine(
+            source: 'minnesota', timestamp: $windowStart->modify('+30 seconds'), host: 'minnesota', appName: 'Hostd',
+            procId: null, severity: 5, facility: 4, message: 'second burst', raw: 'second burst',
+        ));
+        $this->ingestor->flushAll(new \DateTimeImmutable('2026-08-11T14:17:00+00:00'));
+
+        $objects = $this->em->getRepository(LogObject::class)->findBy(['source' => 'minnesota']);
+        self::assertCount(1, $objects, 'the second flush must merge into the same catalog row, not create a second one');
+
+        $logObject = $objects[0];
+        self::assertSame(2, $logObject->getEntryCount());
+
+        $entries = $this->em->getRepository(LogEntry::class)->findBy(['source' => 'minnesota'], ['timestamp' => 'ASC']);
+        self::assertCount(2, $entries);
+        self::assertSame('first burst', $entries[0]->getMessage());
+        self::assertSame('second burst', $entries[1]->getMessage());
+
+        $storedPath = self::SPOOL_PATH . '/minnesota/2026/08/11/14-15.log.gz';
+        $lines = array_values(array_filter(explode("\n", gzdecode(file_get_contents($storedPath)))));
+        self::assertCount(2, $lines, 'the stored object must contain both bursts, not just the second');
+
+        // The catalog's recorded checksum must match what is actually
+        // stored — this is the exact invariant that broke in production.
+        self::assertSame(hash('sha256', file_get_contents($storedPath)), $logObject->getChecksumSha256());
+    }
+
     public function testSpoolIsCreatedOnceAndReused(): void
     {
         $windowStart = new \DateTimeImmutable('2026-08-11T14:15:00+00:00');

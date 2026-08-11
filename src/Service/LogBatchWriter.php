@@ -44,23 +44,52 @@ class LogBatchWriter
 
         $em = $this->entityManager();
         $backend = $this->spoolProvider->getSpool();
-
-        $content = '';
-        foreach ($lines as $line) {
-            $content .= json_encode($line->toArray(), JSON_THROW_ON_ERROR) . "\n";
-        }
-        $gzipped = gzencode($content, 9);
-
         $key = $this->keyScheme->build($source, $windowStart);
+
+        $newContent = '';
+        foreach ($lines as $line) {
+            $newContent .= json_encode($line->toArray(), JSON_THROW_ON_ERROR) . "\n";
+        }
+
+        /** @var LogObject|null $logObject */
+        $logObject = $em->getRepository(LogObject::class)->findOneByBackendAndKey($backend, $key);
+
+        if ($logObject !== null) {
+            // A second, later-arriving burst landed in a window that
+            // already flushed once (the same source's traffic split across
+            // a gap, more likely to straddle a boundary the shorter the
+            // batching window is). Append to the existing object instead of
+            // overwriting it: silently clobbering the stored bytes while
+            // failing to update this row (object_key is unique per backend,
+            // so a second insert attempt would just violate that constraint)
+            // would leave the catalog's checksum permanently out of sync
+            // with what's actually stored — every later migration attempt
+            // would then fail the same way forever, comparing real content
+            // against stale, wrong bookkeeping.
+            $combinedContent = gzdecode($this->storageService->read($backend, $key)) . $newContent;
+            $entryCount = $logObject->getEntryCount() + count($lines);
+            $windowEnd = max($logObject->getWindowEnd(), $windowEnd);
+        } else {
+            $logObject = new LogObject();
+            $logObject->setStorageBackend($backend);
+            $logObject->setObjectKey($key);
+            $logObject->setSource($source);
+            $logObject->setTierRank($backend->getTierRank());
+            $logObject->setWindowStart($windowStart);
+            $combinedContent = $newContent;
+            $entryCount = count($lines);
+        }
+
+        $gzipped = gzencode($combinedContent, 9);
         $checksum = hash('sha256', $gzipped);
 
         $this->storageService->write($backend, $key, $gzipped);
 
         $meta = [
             'source' => $source,
-            'windowStart' => $windowStart->format(\DateTimeInterface::ATOM),
+            'windowStart' => $logObject->getWindowStart()->format(\DateTimeInterface::ATOM),
             'windowEnd' => $windowEnd->format(\DateTimeInterface::ATOM),
-            'entryCount' => count($lines),
+            'entryCount' => $entryCount,
             'sizeBytes' => strlen($gzipped),
             'checksumSha256' => $checksum,
             'format' => 'ndjson.gz',
@@ -72,16 +101,10 @@ class LogBatchWriter
             json_encode($meta, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR),
         );
 
-        $logObject = new LogObject();
-        $logObject->setStorageBackend($backend);
-        $logObject->setObjectKey($key);
-        $logObject->setSource($source);
-        $logObject->setTierRank($backend->getTierRank());
-        $logObject->setWindowStart($windowStart);
         $logObject->setWindowEnd($windowEnd);
         $logObject->setSizeBytes(strlen($gzipped));
         $logObject->setChecksumSha256($checksum);
-        $logObject->setEntryCount(count($lines));
+        $logObject->setEntryCount($entryCount);
         $logObject->setStatus('staged');
         $em->persist($logObject);
 
