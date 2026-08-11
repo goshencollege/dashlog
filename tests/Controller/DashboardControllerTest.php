@@ -153,6 +153,84 @@ class DashboardControllerTest extends WebTestCase
         self::assertCount(0, $crawler->filter('.card-footer'));
     }
 
+    public function testLiveToggleOnlyAppearsOnPageOne(): void
+    {
+        $client = $this->loginAsUser();
+        for ($i = 0; $i < 51; $i++) {
+            $this->makeEntry('web-01', 5, "line {$i}", new \DateTimeImmutable(sprintf('2026-08-11T00:%02d:00+00:00', $i % 60)));
+        }
+
+        $crawler = $client->request('GET', '/');
+        self::assertCount(1, $crawler->filter('#live-toggle'));
+
+        $crawler = $client->request('GET', '/', ['page' => 2]);
+        self::assertCount(0, $crawler->filter('#live-toggle'));
+    }
+
+    public function testUpdatesEndpointRequiresAuth(): void
+    {
+        $this->client->request('GET', '/logs/updates');
+
+        self::assertResponseRedirects('/saml/login');
+    }
+
+    public function testUpdatesReturnsOnlyEntriesNewerThanSinceId(): void
+    {
+        $client = $this->loginAsUser();
+        $old = $this->makeEntry('web-01', 5, 'old', new \DateTimeImmutable());
+        $new = $this->makeEntry('web-01', 5, 'new', new \DateTimeImmutable());
+
+        $client->request('GET', '/logs/updates', ['sinceId' => $old->getId()]);
+
+        self::assertResponseIsSuccessful();
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertCount(1, $payload['entries']);
+        self::assertSame($new->getId(), $payload['entries'][0]['id']);
+        self::assertSame('new', $payload['entries'][0]['message']);
+        self::assertSame($new->getId(), $payload['lastId']);
+    }
+
+    public function testUpdatesResponseShapeIncludesDisplayFields(): void
+    {
+        $client = $this->loginAsUser();
+        $this->makeEntry('web-01', 3, 'error line', new \DateTimeImmutable());
+
+        $client->request('GET', '/logs/updates');
+
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        $entry = $payload['entries'][0];
+        self::assertSame('Error', $entry['severityLabel']);
+        self::assertArrayHasKey('severityBadgeClass', $entry);
+        self::assertSame('web-01', $entry['source']);
+        self::assertArrayHasKey('timestamp', $entry);
+        self::assertArrayHasKey('facilityLabel', $entry);
+    }
+
+    public function testUpdatesAppliesFilters(): void
+    {
+        $client = $this->loginAsUser();
+        $this->makeEntry('web-01', 5, 'from web', new \DateTimeImmutable());
+        $this->makeEntry('db-01', 5, 'from db', new \DateTimeImmutable());
+
+        $client->request('GET', '/logs/updates', ['source' => 'web']);
+
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertCount(1, $payload['entries']);
+        self::assertSame('from web', $payload['entries'][0]['message']);
+    }
+
+    public function testUpdatesWithNothingNewReturnsEmptyAndUnchangedLastId(): void
+    {
+        $client = $this->loginAsUser();
+        $entry = $this->makeEntry('web-01', 5, 'only one', new \DateTimeImmutable());
+
+        $client->request('GET', '/logs/updates', ['sinceId' => $entry->getId()]);
+
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame([], $payload['entries']);
+        self::assertSame($entry->getId(), $payload['lastId']);
+    }
+
     public function testPaginationControlsAppearAndNavigateAcrossPages(): void
     {
         $client = $this->loginAsUser();

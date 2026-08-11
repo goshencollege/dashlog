@@ -3,12 +3,47 @@
 {% block title %}Logs{% endblock %}
 {% block body_class %}page-list-view{% endblock %}
 
+{% block page_styles %}
+<style>
+    .live-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background-color: #198754;
+        margin-right: 4px;
+        animation: live-pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes live-pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: .3; }
+    }
+    .log-live-row {
+        animation: log-row-highlight 2s ease-out;
+    }
+    @keyframes log-row-highlight {
+        0% { background-color: rgba(25, 135, 84, .15); }
+        100% { background-color: transparent; }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="list-page-content">
     <div class="sticky-list-header">
         <div class="d-flex align-items-center justify-content-between mb-3">
             <h1 class="h3 mb-0"><i class="bi bi-clipboard-data-fill me-2"></i>Logs</h1>
-            <span class="text-muted small">{{ total }} matching {{ total == 1 ? 'entry' : 'entries' }}</span>
+            <div class="d-flex align-items-center gap-3">
+                {% if page == 1 %}
+                <div class="form-check form-switch mb-0">
+                    <input class="form-check-input" type="checkbox" role="switch" id="live-toggle">
+                    <label class="form-check-label small" for="live-toggle">
+                        <span id="live-indicator" class="d-none"><span class="live-dot"></span></span>Live
+                    </label>
+                </div>
+                {% endif %}
+                <span class="text-muted small"><span id="entry-count-number">{{ total }}</span> matching {{ total == 1 ? 'entry' : 'entries' }}</span>
+            </div>
         </div>
 
         <form method="get" class="row g-2 mb-3 align-items-end">
@@ -46,26 +81,28 @@
 
     <div class="list-scroll-card">
         <div class="card">
-            {% if entries is empty %}
-                <div class="card-body text-center py-5 text-muted">
-                    <i class="bi bi-inbox display-4 mb-3 d-block"></i>
-                    No log entries match these filters.
-                </div>
-            {% else %}
-                <div class="table-responsive">
-                    <table class="table table-hover table-sm mb-0">
-                        <thead>
-                            <tr>
-                                <th style="white-space:nowrap;">Time</th>
-                                <th>Severity</th>
-                                <th>Source</th>
-                                <th>App</th>
-                                <th>PID</th>
-                                <th>Facility</th>
-                                <th>Message</th>
-                            </tr>
-                        </thead>
-                        <tbody>
+            <div class="table-responsive">
+                <table class="table table-hover table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th style="white-space:nowrap;">Time</th>
+                            <th>Severity</th>
+                            <th>Source</th>
+                            <th>App</th>
+                            <th>PID</th>
+                            <th>Facility</th>
+                            <th>Message</th>
+                        </tr>
+                    </thead>
+                    <tbody id="log-table-body">
+                        {% if entries is empty %}
+                        <tr id="no-entries-row">
+                            <td colspan="7" class="text-center py-5 text-muted">
+                                <i class="bi bi-inbox display-4 mb-3 d-block"></i>
+                                No log entries match these filters.
+                            </td>
+                        </tr>
+                        {% else %}
                             {% for entry in entries %}
                             <tr>
                                 <td class="text-muted small" style="white-space:nowrap;">{{ entry.timestamp|date('Y-m-d H:i:s') }}</td>
@@ -81,26 +118,129 @@
                                 <td class="font-monospace small" style="white-space:pre-wrap;">{{ entry.message }}</td>
                             </tr>
                             {% endfor %}
-                        </tbody>
-                    </table>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+            {% if totalPages > 1 %}
+            <div class="card-footer d-flex align-items-center justify-content-between">
+                <span class="text-muted small">Page {{ page }} of {{ totalPages }}</span>
+                <div class="d-flex gap-2">
+                    <a href="{{ path('dashboard', filters|merge({page: max(1, page - 1)})) }}"
+                       class="btn btn-sm btn-outline-secondary {{ page <= 1 ? 'disabled' }}">
+                        <i class="bi bi-chevron-left"></i> Newer
+                    </a>
+                    <a href="{{ path('dashboard', filters|merge({page: min(totalPages, page + 1)})) }}"
+                       class="btn btn-sm btn-outline-secondary {{ page >= totalPages ? 'disabled' }}">
+                        Older <i class="bi bi-chevron-right"></i>
+                    </a>
                 </div>
-                {% if totalPages > 1 %}
-                <div class="card-footer d-flex align-items-center justify-content-between">
-                    <span class="text-muted small">Page {{ page }} of {{ totalPages }}</span>
-                    <div class="d-flex gap-2">
-                        <a href="{{ path('dashboard', filters|merge({page: max(1, page - 1)})) }}"
-                           class="btn btn-sm btn-outline-secondary {{ page <= 1 ? 'disabled' }}">
-                            <i class="bi bi-chevron-left"></i> Newer
-                        </a>
-                        <a href="{{ path('dashboard', filters|merge({page: min(totalPages, page + 1)})) }}"
-                           class="btn btn-sm btn-outline-secondary {{ page >= totalPages ? 'disabled' }}">
-                            Older <i class="bi bi-chevron-right"></i>
-                        </a>
-                    </div>
-                </div>
-                {% endif %}
+            </div>
             {% endif %}
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+{% if page == 1 %}
+<script>
+(function () {
+    var toggle = document.getElementById('live-toggle');
+    var indicator = document.getElementById('live-indicator');
+    var tbody = document.getElementById('log-table-body');
+    var countEl = document.getElementById('entry-count-number');
+
+    var lastId = {{ latestEntryId }};
+    var currentFilters = {
+        source: {{ filters.source|json_encode|raw }},
+        severity: {{ filters.severity|json_encode|raw }},
+        q: {{ filters.q|json_encode|raw }},
+        from: {{ filters.from|json_encode|raw }},
+        to: {{ filters.to|json_encode|raw }}
+    };
+    var pollTimer = null;
+    var maxRows = 200;
+
+    function escapeHtml(value) {
+        var div = document.createElement('div');
+        div.textContent = value === null || value === undefined ? '' : value;
+        return div.innerHTML;
+    }
+
+    function buildRow(entry) {
+        var tr = document.createElement('tr');
+        tr.className = 'log-live-row';
+        tr.innerHTML =
+            '<td class="text-muted small" style="white-space:nowrap;">' + escapeHtml(entry.timestamp) + '</td>' +
+            '<td><span class="badge ' + entry.severityBadgeClass + '">' + entry.severityLabel + '</span></td>' +
+            '<td class="fw-semibold">' + escapeHtml(entry.source) + '</td>' +
+            '<td>' + escapeHtml(entry.appName || '—') + '</td>' +
+            '<td class="text-muted">' + escapeHtml(entry.procId || '—') + '</td>' +
+            '<td class="text-muted small">' + escapeHtml(entry.facilityLabel) + '</td>' +
+            '<td class="font-monospace small" style="white-space:pre-wrap;">' + escapeHtml(entry.message) + '</td>';
+        return tr;
+    }
+
+    function poll() {
+        if (document.hidden) {
+            return;
+        }
+
+        var params = new URLSearchParams();
+        Object.keys(currentFilters).forEach(function (key) {
+            if (currentFilters[key] !== '') {
+                params.set(key, currentFilters[key]);
+            }
+        });
+        params.set('sinceId', lastId);
+
+        fetch('{{ path('log_updates') }}?' + params.toString())
+            .then(function (response) { return response.json(); })
+            .then(function (data) {
+                if (data.entries.length === 0) {
+                    return;
+                }
+
+                var noEntriesRow = document.getElementById('no-entries-row');
+                if (noEntriesRow) {
+                    noEntriesRow.remove();
+                }
+
+                data.entries.forEach(function (entry) {
+                    tbody.insertBefore(buildRow(entry), tbody.firstChild);
+                });
+
+                while (tbody.children.length > maxRows) {
+                    tbody.removeChild(tbody.lastChild);
+                }
+
+                lastId = data.lastId;
+                if (countEl) {
+                    countEl.textContent = String(parseInt(countEl.textContent, 10) + data.entries.length);
+                }
+            })
+            .catch(function () {
+                // Transient failure — the next poll tick will just try again.
+            });
+    }
+
+    if (toggle) {
+        toggle.addEventListener('change', function () {
+            if (toggle.checked) {
+                indicator.classList.remove('d-none');
+                poll();
+                pollTimer = setInterval(poll, 3000);
+            } else {
+                indicator.classList.add('d-none');
+                if (pollTimer) {
+                    clearInterval(pollTimer);
+                    pollTimer = null;
+                }
+            }
+        });
+    }
+})();
+</script>
+{% endif %}
 {% endblock %}
