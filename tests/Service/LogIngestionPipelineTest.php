@@ -10,6 +10,7 @@ use App\Enum\StorageBackendType;
 use App\Service\LogIngestor;
 use App\Service\SpoolProvider;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\Persistence\ManagerRegistry;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 
 class LogIngestionPipelineTest extends KernelTestCase
@@ -134,6 +135,39 @@ class LogIngestionPipelineTest extends KernelTestCase
         $logObject = $this->em->getRepository(LogObject::class)->findOneBy(['source' => 'web-02']);
         self::assertNotNull($logObject);
         self::assertTrue($logObject->getStorageBackend()->isSpool());
+        self::assertSame('staged', $logObject->getStatus());
+    }
+
+    public function testFlushRecoversAfterEntityManagerIsClosedByAPriorFailure(): void
+    {
+        // Doctrine permanently closes an EntityManager after any failed
+        // flush (a deadlock, a dropped connection, anything) — every later
+        // call on that same instance keeps throwing after that. Since
+        // SyslogListenCommand's loop reuses the same injected services for
+        // the lifetime of the process, this must self-heal rather than wedge
+        // ingestion forever. Simulate the "already closed" precondition
+        // directly rather than trying to trigger a real flush failure.
+        $this->em->close();
+
+        $windowStart = new \DateTimeImmutable('2026-08-11T14:15:00+00:00');
+        $this->ingestor->ingest(new IngestedLogLine(
+            source: 'web-03',
+            timestamp: $windowStart,
+            host: 'web-03',
+            appName: 'sshd',
+            procId: null,
+            severity: 5,
+            facility: 4,
+            message: 'survives a closed entity manager',
+            raw: 'survives a closed entity manager',
+        ));
+
+        $this->ingestor->flushAll(new \DateTimeImmutable('2026-08-11T14:16:00+00:00'));
+
+        // The closed EM from setUp is now stale; fetch a fresh one to verify.
+        $em = self::getContainer()->get(ManagerRegistry::class)->resetManager();
+        $logObject = $em->getRepository(LogObject::class)->findOneBy(['source' => 'web-03']);
+        self::assertNotNull($logObject);
         self::assertSame('staged', $logObject->getStatus());
     }
 

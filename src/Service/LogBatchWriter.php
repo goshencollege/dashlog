@@ -6,6 +6,7 @@ use App\Dto\IngestedLogLine;
 use App\Entity\LogEntry;
 use App\Entity\LogObject;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\Persistence\ManagerRegistry;
 
 /**
  * Writes one closed batching window to storage: the gzipped ndjson object,
@@ -16,6 +17,13 @@ use Doctrine\ORM\EntityManagerInterface;
  * directly on a "real" backend — this decouples ingestion from the health of
  * whatever backend logs are ultimately meant to live on. SpoolDrainService
  * moves them from there in the background.
+ *
+ * Called from SyslogListenCommand's long-running loop, so it can't rely on a
+ * single injected EntityManager staying usable forever: Doctrine closes an
+ * EntityManager permanently after any failed flush (a deadlock, a dropped
+ * connection, anything), and every later call on that same instance keeps
+ * throwing after that. Short-lived requests/commands never notice; a daemon
+ * that lives for hours will. See entityManager() below.
  */
 class LogBatchWriter
 {
@@ -23,7 +31,7 @@ class LogBatchWriter
         private readonly SpoolProvider $spoolProvider,
         private readonly StorageService $storageService,
         private readonly KeyScheme $keyScheme,
-        private readonly EntityManagerInterface $em,
+        private readonly ManagerRegistry $doctrine,
     ) {
     }
 
@@ -34,6 +42,7 @@ class LogBatchWriter
             return;
         }
 
+        $em = $this->entityManager();
         $backend = $this->spoolProvider->getSpool();
 
         $content = '';
@@ -74,7 +83,7 @@ class LogBatchWriter
         $logObject->setChecksumSha256($checksum);
         $logObject->setEntryCount(count($lines));
         $logObject->setStatus('staged');
-        $this->em->persist($logObject);
+        $em->persist($logObject);
 
         foreach ($lines as $line) {
             $entry = new LogEntry();
@@ -87,9 +96,16 @@ class LogBatchWriter
             $entry->setSeverity($line->severity);
             $entry->setFacility($line->facility);
             $entry->setMessage($line->message);
-            $this->em->persist($entry);
+            $em->persist($entry);
         }
 
-        $this->em->flush();
+        $em->flush();
+    }
+
+    private function entityManager(): EntityManagerInterface
+    {
+        $em = $this->doctrine->getManager();
+
+        return $em->isOpen() ? $em : $this->doctrine->resetManager();
     }
 }
