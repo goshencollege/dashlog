@@ -27,6 +27,7 @@ class LogObjectMigrationServiceTest extends KernelTestCase
         $this->storageService = self::getContainer()->get(StorageService::class);
         $this->migrationService = self::getContainer()->get(LogObjectMigrationService::class);
 
+        $this->em->createQuery('DELETE FROM App\Entity\LogEntry')->execute();
         $this->em->createQuery('DELETE FROM App\Entity\LogObject')->execute();
         $this->em->createQuery('DELETE FROM App\Entity\StorageBackend')->execute();
 

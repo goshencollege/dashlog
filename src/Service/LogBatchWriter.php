@@ -5,18 +5,22 @@ namespace App\Service;
 use App\Dto\IngestedLogLine;
 use App\Entity\LogEntry;
 use App\Entity\LogObject;
-use App\Repository\StorageBackendRepository;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
  * Writes one closed batching window to storage: the gzipped ndjson object,
  * its meta.json sidecar, the LogObject catalog row, and one LogEntry per
  * line for structured search/browse.
+ *
+ * Writes always land on the write-ahead spool first (status 'staged'), never
+ * directly on a "real" backend — this decouples ingestion from the health of
+ * whatever backend logs are ultimately meant to live on. SpoolDrainService
+ * moves them from there in the background.
  */
 class LogBatchWriter
 {
     public function __construct(
-        private readonly StorageBackendRepository $storageBackendRepository,
+        private readonly SpoolProvider $spoolProvider,
         private readonly StorageService $storageService,
         private readonly KeyScheme $keyScheme,
         private readonly EntityManagerInterface $em,
@@ -30,10 +34,7 @@ class LogBatchWriter
             return;
         }
 
-        $backend = $this->storageBackendRepository->findActiveOrderedByTier()[0] ?? null;
-        if ($backend === null) {
-            throw new \RuntimeException('No active storage backend is configured; cannot write log batch.');
-        }
+        $backend = $this->spoolProvider->getSpool();
 
         $content = '';
         foreach ($lines as $line) {
@@ -72,7 +73,7 @@ class LogBatchWriter
         $logObject->setSizeBytes(strlen($gzipped));
         $logObject->setChecksumSha256($checksum);
         $logObject->setEntryCount(count($lines));
-        $logObject->setStatus('stored');
+        $logObject->setStatus('staged');
         $this->em->persist($logObject);
 
         foreach ($lines as $line) {

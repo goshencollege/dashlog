@@ -31,7 +31,7 @@ class StorageBackendController extends AbstractController
     public function index(StorageBackendRepository $repo): Response
     {
         return $this->render('storage_backend/index.html.twig', [
-            'backends' => $repo->findAll(),
+            'backends' => $repo->findAllExcludingSpool(),
         ]);
     }
 

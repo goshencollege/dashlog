@@ -29,6 +29,7 @@ class TieringServiceTest extends KernelTestCase
         $this->storageService = self::getContainer()->get(StorageService::class);
         $this->tieringService = self::getContainer()->get(TieringService::class);
 
+        $this->em->createQuery('DELETE FROM App\Entity\LogEntry')->execute();
         $this->em->createQuery('DELETE FROM App\Entity\LogObject')->execute();
         $this->em->createQuery('DELETE FROM App\Entity\StorageBackend')->execute();
 

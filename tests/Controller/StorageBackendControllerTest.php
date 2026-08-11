@@ -20,6 +20,8 @@ class StorageBackendControllerTest extends WebTestCase
         $this->client = static::createClient();
         $this->em     = static::getContainer()->get(EntityManagerInterface::class);
 
+        $this->em->createQuery('DELETE FROM App\Entity\LogEntry')->execute();
+        $this->em->createQuery('DELETE FROM App\Entity\LogObject')->execute();
         $this->em->createQuery('DELETE FROM App\Entity\StorageBackend')->execute();
         $this->em->createQuery('DELETE FROM App\Entity\SamlProvider')->execute();
     }
