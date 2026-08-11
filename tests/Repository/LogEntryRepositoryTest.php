@@ -133,6 +133,49 @@ class LogEntryRepositoryTest extends KernelTestCase
         self::assertSame('line 4', $page1['results'][0]->getMessage());
     }
 
+    public function testFindNewerThanReturnsOnlyEntriesAfterCursorOrderedAscending(): void
+    {
+        $first = $this->makeEntry('web-01', 5, 'first', new \DateTimeImmutable());
+        $second = $this->makeEntry('web-01', 5, 'second', new \DateTimeImmutable());
+        $third = $this->makeEntry('web-01', 5, 'third', new \DateTimeImmutable());
+
+        $result = $this->repo->findNewerThan($first->getId(), []);
+
+        self::assertCount(2, $result);
+        self::assertSame($second->getId(), $result[0]->getId());
+        self::assertSame($third->getId(), $result[1]->getId());
+    }
+
+    public function testFindNewerThanWithZeroCursorReturnsEverything(): void
+    {
+        $this->makeEntry('web-01', 5, 'one', new \DateTimeImmutable());
+        $this->makeEntry('web-01', 5, 'two', new \DateTimeImmutable());
+
+        self::assertCount(2, $this->repo->findNewerThan(0, []));
+    }
+
+    public function testFindNewerThanAppliesTheSameFiltersAsSearch(): void
+    {
+        $matching = $this->makeEntry('web-01', 3, 'error line', new \DateTimeImmutable());
+        $this->makeEntry('web-01', 6, 'info line', new \DateTimeImmutable());
+
+        $result = $this->repo->findNewerThan(0, ['severity' => 3]);
+
+        self::assertCount(1, $result);
+        self::assertSame($matching->getId(), $result[0]->getId());
+    }
+
+    public function testFindNewerThanRespectsLimit(): void
+    {
+        for ($i = 0; $i < 5; $i++) {
+            $this->makeEntry('web-01', 5, "line {$i}", new \DateTimeImmutable());
+        }
+
+        $result = $this->repo->findNewerThan(0, [], limit: 2);
+
+        self::assertCount(2, $result);
+    }
+
     private function makeEntry(string $source, int $severity, string $message, \DateTimeImmutable $timestamp): LogEntry
     {
         $entry = new LogEntry();
