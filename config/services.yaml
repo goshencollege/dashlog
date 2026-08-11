@@ -2,6 +2,7 @@
 
 parameters:
     default_log_spool_path: '%kernel.project_dir%/var/log-spool'
+    default_log_browse_page_size: 50
 
 services:
     _defaults:
@@ -29,6 +30,10 @@ services:
     App\Service\SpoolProvider:
         arguments:
             $spoolPath: '%env(default:default_log_spool_path:LOG_SPOOL_PATH)%'
+
+    App\Controller\DashboardController:
+        arguments:
+            $logBrowsePageSize: '%env(int:default:default_log_browse_page_size:LOG_BROWSE_PAGE_SIZE)%'
 
     Symfony\Component\HttpFoundation\Session\Storage\Handler\PdoSessionHandler:
         arguments:
