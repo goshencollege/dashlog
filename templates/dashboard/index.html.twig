@@ -1,17 +1,106 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}Dashboard{% endblock %}
+{% block title %}Logs{% endblock %}
+{% block body_class %}page-list-view{% endblock %}
 
 {% block content %}
-<div class="d-flex align-items-center justify-content-between mb-4">
-    <h1 class="h3 mb-0"><i class="bi bi-speedometer2 me-2"></i>Dashboard</h1>
-</div>
+<div class="list-page-content">
+    <div class="sticky-list-header">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+            <h1 class="h3 mb-0"><i class="bi bi-clipboard-data-fill me-2"></i>Logs</h1>
+            <span class="text-muted small">{{ total }} matching {{ total == 1 ? 'entry' : 'entries' }}</span>
+        </div>
 
-<div class="card">
-    <div class="card-body text-center py-5">
-        <i class="bi bi-clipboard-data-fill display-1 text-primary mb-3"></i>
-        <h4>Welcome to DashLog</h4>
-        <p class="text-muted mb-0">Syslog collection, viewing, and analysis coming soon.</p>
+        <form method="get" class="row g-2 mb-3 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label small mb-1">Source</label>
+                <input type="text" name="source" value="{{ filters.source }}" class="form-control form-control-sm" placeholder="e.g. web-01">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">Severity</label>
+                <select name="severity" class="form-select form-select-sm">
+                    <option value="">Any</option>
+                    {% for severity in severities %}
+                        <option value="{{ severity.value }}" {{ filters.severity == severity.value ? 'selected' }}>{{ severity.label() }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-1">Message contains</label>
+                <input type="text" name="q" value="{{ filters.q }}" class="form-control form-control-sm" placeholder="search text">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">From</label>
+                <input type="datetime-local" name="from" value="{{ filters.from }}" class="form-control form-control-sm">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">To</label>
+                <input type="datetime-local" name="to" value="{{ filters.to }}" class="form-control form-control-sm">
+            </div>
+            <div class="col-md-1 d-flex gap-1">
+                <button type="submit" class="btn btn-sm btn-primary flex-fill" title="Search"><i class="bi bi-search"></i></button>
+                <a href="{{ path('dashboard') }}" class="btn btn-sm btn-outline-secondary" title="Clear filters"><i class="bi bi-x-lg"></i></a>
+            </div>
+        </form>
+    </div>
+
+    <div class="list-scroll-card">
+        <div class="card">
+            {% if entries is empty %}
+                <div class="card-body text-center py-5 text-muted">
+                    <i class="bi bi-inbox display-4 mb-3 d-block"></i>
+                    No log entries match these filters.
+                </div>
+            {% else %}
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm mb-0">
+                        <thead>
+                            <tr>
+                                <th style="white-space:nowrap;">Time</th>
+                                <th>Severity</th>
+                                <th>Source</th>
+                                <th>App</th>
+                                <th>PID</th>
+                                <th>Facility</th>
+                                <th>Message</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for entry in entries %}
+                            <tr>
+                                <td class="text-muted small" style="white-space:nowrap;">{{ entry.timestamp|date('Y-m-d H:i:s') }}</td>
+                                <td>
+                                    <span class="badge {{ syslog_severity_badge_class(entry.severity) }}">
+                                        {{ syslog_severity_label(entry.severity) }}
+                                    </span>
+                                </td>
+                                <td class="fw-semibold">{{ entry.source }}</td>
+                                <td>{{ entry.appName ?? '—' }}</td>
+                                <td class="text-muted">{{ entry.procId ?? '—' }}</td>
+                                <td class="text-muted small">{{ syslog_facility_label(entry.facility) }}</td>
+                                <td class="font-monospace small" style="white-space:pre-wrap;">{{ entry.message }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% if totalPages > 1 %}
+                <div class="card-footer d-flex align-items-center justify-content-between">
+                    <span class="text-muted small">Page {{ page }} of {{ totalPages }}</span>
+                    <div class="d-flex gap-2">
+                        <a href="{{ path('dashboard', filters|merge({page: max(1, page - 1)})) }}"
+                           class="btn btn-sm btn-outline-secondary {{ page <= 1 ? 'disabled' }}">
+                            <i class="bi bi-chevron-left"></i> Newer
+                        </a>
+                        <a href="{{ path('dashboard', filters|merge({page: min(totalPages, page + 1)})) }}"
+                           class="btn btn-sm btn-outline-secondary {{ page >= totalPages ? 'disabled' }}">
+                            Older <i class="bi bi-chevron-right"></i>
+                        </a>
+                    </div>
+                </div>
+                {% endif %}
+            {% endif %}
+        </div>
     </div>
 </div>
 {% endblock %}
