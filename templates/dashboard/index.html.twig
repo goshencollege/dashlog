@@ -29,6 +29,46 @@
         0% { background-color: rgba(25, 135, 84, .15); }
         100% { background-color: transparent; }
     }
+
+    /* TomSelect ships a light-only theme; retarget its hardcoded colors at
+       Bootstrap's own CSS variables so it follows dark mode and the
+       purple/green/rainbow accent themes instead of fighting them. */
+    .ts-dropdown,
+    .ts-control,
+    .ts-control input {
+        color: var(--bs-body-color);
+    }
+    .ts-control {
+        background-color: var(--bs-body-bg);
+    }
+    .ts-control input::placeholder {
+        color: var(--bs-secondary-color);
+    }
+    .ts-dropdown {
+        border-color: var(--bs-border-color);
+    }
+    .ts-dropdown .optgroup-header {
+        color: var(--bs-secondary-color);
+    }
+    .ts-wrapper.multi .ts-control > div {
+        background: var(--bs-tertiary-bg);
+        color: var(--bs-body-color);
+        border-color: var(--bs-border-color);
+    }
+    .ts-wrapper.multi .ts-control > div.active {
+        background: var(--bs-primary);
+        color: #fff;
+    }
+    .ts-wrapper.plugin-remove_button .item .remove {
+        border-left-color: var(--bs-border-color);
+    }
+    .ts-wrapper.plugin-remove_button .item .remove:hover {
+        background: rgba(var(--bs-body-color-rgb), .08);
+    }
+    .focus .ts-control {
+        border-color: var(--bs-primary);
+        box-shadow: 0 0 0 .25rem rgba(var(--bs-primary-rgb), .25);
+    }
 </style>
 {% endblock %}
 
