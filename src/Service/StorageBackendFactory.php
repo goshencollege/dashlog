@@ -14,13 +14,65 @@ use RobGridley\Flysystem\Smb\SmbAdapter;
 
 class StorageBackendFactory
 {
+    /**
+     * One connection per backend, reused for the life of this service
+     * instance, rather than opened fresh on every call — a single spool
+     * drain sweep can touch the same backend hundreds of times, and
+     * building a brand-new CIFS/S3 session for each one is both wasteful
+     * and, in practice, enough connection churn for a NAS to start
+     * throttling or rejecting the source IP.
+     *
+     * @var array<string, Filesystem>
+     */
+    private array $filesystems = [];
+
     public function __construct(
         private readonly EncryptionService $encryption,
     ) {}
 
     public function createFilesystem(StorageBackend $backend): Filesystem
     {
-        return new Filesystem($this->createAdapter($backend));
+        $key = $this->cacheKey($backend);
+        if ($key === null) {
+            return new Filesystem($this->createAdapter($backend));
+        }
+
+        return $this->filesystems[$key] ??= new Filesystem($this->createAdapter($backend));
+    }
+
+    /**
+     * Drops the pooled connection for $backend, if any, so the next
+     * createFilesystem() call builds a fresh one. Used by StorageService to
+     * recover from a connection that's gone stale between calls (idle
+     * timeout, the far end restarting, etc.) without needing this whole
+     * process to restart.
+     */
+    public function forget(StorageBackend $backend): void
+    {
+        $key = $this->cacheKey($backend);
+        if ($key !== null) {
+            unset($this->filesystems[$key]);
+        }
+    }
+
+    /**
+     * Keyed by id and updatedAt so an edited backend (new credentials, a
+     * different host/share) gets a fresh connection instead of reusing one
+     * built from now-stale config. Null for a not-yet-persisted backend —
+     * there's nothing meaningful to key on, so it's simply never pooled.
+     */
+    private function cacheKey(StorageBackend $backend): ?string
+    {
+        if ($backend->getId() === null) {
+            return null;
+        }
+
+        // Microsecond precision matters here: two edits to the same backend
+        // within the same wall-clock second are otherwise indistinguishable
+        // (the DB column itself only stores whole seconds, but the
+        // in-memory value AuditListener sets on preUpdate carries whatever
+        // precision the platform clock gives new \DateTimeImmutable()).
+        return $backend->getId() . ':' . $backend->getUpdatedAt()->format('Y-m-d H:i:s.u');
     }
 
     private function createAdapter(StorageBackend $backend): LocalFilesystemAdapter|SmbAdapter|AwsS3V3Adapter
