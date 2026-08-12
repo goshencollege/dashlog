@@ -314,6 +314,7 @@ else
   db:
     image: mysql:8.0
     read_only: true
+    restart: unless-stopped
     environment:
       MYSQL_DATABASE: ${DB_NAME}
       MYSQL_USER: ${DB_USER}
