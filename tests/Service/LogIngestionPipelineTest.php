@@ -8,6 +8,7 @@ use App\Entity\LogObject;
 use App\Entity\StorageBackend;
 use App\Enum\StorageBackendType;
 use App\Service\LogIngestor;
+use App\Service\LogObjectMigrationService;
 use App\Service\SpoolProvider;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
@@ -213,6 +214,50 @@ class LogIngestionPipelineTest extends KernelTestCase
         // The catalog's recorded checksum must match what is actually
         // stored — this is the exact invariant that broke in production.
         self::assertSame(hash('sha256', file_get_contents($storedPath)), $logObject->getChecksumSha256());
+    }
+
+    public function testLateBurstAfterMigrationMergesIntoTheStoredObjectInsteadOfDuplicatingIt(): void
+    {
+        // The same collision testSecondBurstLandingInAnAlreadyFlushedWindow...
+        // guards against, but for a burst arriving even later — after the
+        // object has already been drained off the spool to a real backend.
+        // A lookup scoped to (spool backend, key) would miss it there and
+        // create a second, colliding catalog row for the same logical
+        // batch, which can never itself migrate (its target key is already
+        // claimed by the row that got there first).
+        $windowStart = new \DateTimeImmutable('2026-08-11T14:15:00+00:00');
+
+        $this->ingestor->ingest(new IngestedLogLine(
+            source: 'missouri', timestamp: $windowStart, host: 'missouri', appName: 'Hostd',
+            procId: null, severity: 5, facility: 4, message: 'first burst', raw: 'first burst',
+        ));
+        $this->ingestor->flushAll(new \DateTimeImmutable('2026-08-11T14:16:00+00:00'));
+
+        $logObject = $this->em->getRepository(LogObject::class)->findOneBy(['source' => 'missouri']);
+        $realBackend = $this->em->getRepository(StorageBackend::class)->findOneBy(['name' => 'Test Local']);
+        self::getContainer()->get(LogObjectMigrationService::class)->migrate($logObject, $realBackend);
+        self::assertSame('stored', $logObject->getStatus());
+        self::assertSame($realBackend->getId(), $logObject->getStorageBackend()->getId());
+
+        $this->ingestor->ingest(new IngestedLogLine(
+            source: 'missouri', timestamp: $windowStart->modify('+30 seconds'), host: 'missouri', appName: 'Hostd',
+            procId: null, severity: 5, facility: 4, message: 'late burst', raw: 'late burst',
+        ));
+        $this->ingestor->flushAll(new \DateTimeImmutable('2026-08-11T14:17:00+00:00'));
+
+        $objects = $this->em->getRepository(LogObject::class)->findBy(['source' => 'missouri']);
+        self::assertCount(1, $objects, 'the late burst must merge into the already-migrated row, not create a second one');
+        self::assertSame('stored', $objects[0]->getStatus(), 'merging must not undo an already-completed migration');
+        self::assertSame($realBackend->getId(), $objects[0]->getStorageBackend()->getId());
+
+        $entries = $this->em->getRepository(LogEntry::class)->findBy(['source' => 'missouri'], ['timestamp' => 'ASC']);
+        self::assertCount(2, $entries);
+        self::assertSame('first burst', $entries[0]->getMessage());
+        self::assertSame('late burst', $entries[1]->getMessage());
+
+        $storedPath = $this->tmpDir . '/missouri/2026/08/11/14-15.log.gz';
+        $lines = array_values(array_filter(explode("\n", gzdecode(file_get_contents($storedPath)))));
+        self::assertCount(2, $lines, 'the file on the real backend must contain both bursts');
     }
 
     public function testLinesAreVisibleBeforeTheirWindowCloses(): void

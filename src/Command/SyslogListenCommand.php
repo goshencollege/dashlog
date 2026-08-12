@@ -51,11 +51,31 @@ class SyslogListenCommand extends Command
 
         $io->success("Listening for syslog messages on udp://{$host}:{$port}");
 
+        // LogIngestor's window buffer is in-process only (see its docblock)
+        // — a graceful stop must flush whatever's still open before exiting,
+        // or every window that hadn't yet closed is orphaned 'pending'
+        // forever. This image's STOPSIGNAL is SIGQUIT (inherited from the
+        // php-fpm base image, correct for the app container that shares it)
+        // rather than SIGTERM, so `docker stop`/restart send SIGQUIT here
+        // too — listen for both, plus SIGINT for interactive Ctrl-C. Guarded
+        // by function_exists() since pcntl isn't available in every PHP
+        // build; without it this just degrades to the old, ungraceful
+        // behavior.
+        $shouldStop = false;
+        if (function_exists('pcntl_async_signals')) {
+            pcntl_async_signals(true);
+            $stop = function () use (&$shouldStop): void { $shouldStop = true; };
+            pcntl_signal(SIGTERM, $stop);
+            pcntl_signal(SIGINT, $stop);
+            pcntl_signal(SIGQUIT, $stop);
+        }
+
         $lastVisibilityFlush = null;
 
-        // Runs until killed. stream_select's timeout doubles as the tick that
-        // drives flushExpiredWindows even during quiet periods with no traffic.
-        while (true) {
+        // Runs until stopped. stream_select's timeout doubles as the tick
+        // that drives flushExpiredWindows even during quiet periods with no
+        // traffic.
+        while (!$shouldStop) {
             $read = [$socket];
             $write = $except = [];
 
@@ -96,6 +116,15 @@ class SyslogListenCommand extends Command
                 $this->logger->error('Unexpected error while flushing log batches.', ['exception' => $e]);
             }
         }
+
+        $io->writeln('Stop signal received, flushing open windows before exit…');
+        try {
+            $this->ingestor->flushAll(new \DateTimeImmutable());
+        } catch (\Throwable $e) {
+            $this->logger->error('Failed to flush open windows during graceful shutdown.', ['exception' => $e]);
+        }
+
+        return Command::SUCCESS;
     }
 
     private function peerAddress(string $peer): string

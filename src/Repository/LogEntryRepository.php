@@ -3,6 +3,7 @@
 namespace App\Repository;
 
 use App\Entity\LogEntry;
+use App\Entity\LogObject;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\ORM\QueryBuilder;
 use Doctrine\Persistence\ManagerRegistry;
@@ -76,6 +77,18 @@ class LogEntryRepository extends ServiceEntityRepository
         $this->applyFilters($qb, $filters);
 
         return $qb->getQuery()->getResult();
+    }
+
+    /**
+     * Every LogEntry for one LogObject, oldest first — used to reconstruct
+     * a batch's lines when the in-memory buffer that would normally have
+     * produced them is gone (see OrphanedLogObjectFinalizer).
+     *
+     * @return LogEntry[]
+     */
+    public function findByLogObject(LogObject $logObject): array
+    {
+        return $this->findBy(['logObject' => $logObject], ['timestamp' => 'ASC']);
     }
 
     /** @param array{source?: string[], severity?: int[], message?: string, from?: \DateTimeImmutable, to?: \DateTimeImmutable} $filters */

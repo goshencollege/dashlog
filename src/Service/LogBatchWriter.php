@@ -21,11 +21,17 @@ use Doctrine\Persistence\ManagerRegistry;
  *    meta.json sidecar to the write-ahead spool, and flips the LogObject
  *    from 'pending' to 'staged'. Called once per window, when it closes.
  *
- * Both resolve their storage backend via the same find-or-create-by-
- * (backend, key) logic, since a late-arriving second burst after a window
- * already finalized needs to merge into the same catalog row rather than
- * collide with it — whether that late burst is first seen by
- * recordEntries() or by finalize() depends only on timing.
+ * Both resolve their catalog row via the same find-or-create-by-
+ * (source, windowStart) logic, since a late-arriving second burst after a
+ * window already finalized needs to merge into the same catalog row
+ * rather than collide with it — whether that late burst is first seen by
+ * recordEntries() or by finalize() depends only on timing. Looking up by
+ * (source, windowStart) rather than by the object's current (backend,
+ * key) matters here: a batch can move backends (spool → real, or between
+ * tiers) between the first burst and a late second one, and the second
+ * burst has to find it wherever it currently lives — a lookup scoped to
+ * the spool would miss it and create a colliding duplicate catalog row
+ * for the same logical batch instead.
  *
  * Called from SyslogListenCommand's long-running loop, so it can't rely on
  * a single injected EntityManager staying usable forever: Doctrine closes
@@ -147,20 +153,30 @@ class LogBatchWriter
         $logObject->setWindowEnd($windowEnd);
         $logObject->setSizeBytes(strlen($gzipped));
         $logObject->setChecksumSha256($checksum);
-        $logObject->setStatus('staged');
+        // A late burst merging into an object already migrated to a real
+        // backend is already durably stored there — leave that status
+        // alone rather than flipping it back to 'staged', which would
+        // wrongly queue an already-placed object for another drain.
+        if ($logObject->getStatus() !== 'stored') {
+            $logObject->setStatus('staged');
+        }
+        // A successful finalize means the object is in a good state now,
+        // regardless of what happened on any earlier attempt — don't leave
+        // a stale error message attached to it.
+        $logObject->setLastError(null);
         $em->persist($logObject);
         $em->flush();
     }
 
     private function findOrCreatePending(EntityManagerInterface $em, string $source, \DateTimeImmutable $windowStart): LogObject
     {
-        $backend = $this->spoolProvider->getSpool();
-        $key = $this->keyScheme->build($source, $windowStart);
-
-        $logObject = $em->getRepository(LogObject::class)->findOneByBackendAndKey($backend, $key);
+        $logObject = $em->getRepository(LogObject::class)->findOneBySourceAndWindowStart($source, $windowStart);
         if ($logObject !== null) {
             return $logObject;
         }
+
+        $backend = $this->spoolProvider->getSpool();
+        $key = $this->keyScheme->build($source, $windowStart);
 
         $logObject = new LogObject();
         $logObject->setStorageBackend($backend);
