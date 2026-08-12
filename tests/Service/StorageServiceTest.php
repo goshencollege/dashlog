@@ -7,6 +7,8 @@ use App\Enum\StorageBackendType;
 use App\Service\EncryptionService;
 use App\Service\StorageBackendFactory;
 use App\Service\StorageService;
+use League\Flysystem\Filesystem;
+use League\Flysystem\Local\LocalFilesystemAdapter;
 use League\Flysystem\UnableToReadFile;
 use PHPUnit\Framework\TestCase;
 
@@ -89,6 +91,38 @@ class StorageServiceTest extends TestCase
         $keys = array_column(iterator_to_array($this->storageService->list($this->backend, 'web-01')), 'key');
 
         self::assertSame(['web-01/2026/08/11/14-15.log.gz'], $keys);
+    }
+
+    public function testRetriesOnceWithAFreshConnectionAfterAFailure(): void
+    {
+        file_put_contents($this->tmpDir . '/probe.log.gz', 'contents');
+        $badFilesystem = new Filesystem(new LocalFilesystemAdapter($this->tmpDir . '/does-not-exist'));
+        $goodFilesystem = new Filesystem(new LocalFilesystemAdapter($this->tmpDir));
+
+        $factory = $this->createMock(StorageBackendFactory::class);
+        $factory->expects(self::exactly(2))
+            ->method('createFilesystem')
+            ->with($this->backend)
+            ->willReturnOnConsecutiveCalls($badFilesystem, $goodFilesystem);
+        $factory->expects(self::once())->method('forget')->with($this->backend);
+
+        $storageService = new StorageService($factory);
+
+        self::assertSame('contents', $storageService->read($this->backend, 'probe.log.gz'));
+    }
+
+    public function testGivesUpAfterASecondFailure(): void
+    {
+        $badFilesystem = new Filesystem(new LocalFilesystemAdapter($this->tmpDir . '/does-not-exist'));
+
+        $factory = $this->createMock(StorageBackendFactory::class);
+        $factory->expects(self::exactly(2))->method('createFilesystem')->willReturn($badFilesystem);
+        $factory->expects(self::once())->method('forget');
+
+        $storageService = new StorageService($factory);
+
+        $this->expectException(UnableToReadFile::class);
+        $storageService->read($this->backend, 'probe.log.gz');
     }
 
     private function removeDirectory(string $dir): void
