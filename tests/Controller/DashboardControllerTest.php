@@ -413,14 +413,13 @@ class DashboardControllerTest extends WebTestCase
         self::assertSelectorTextContains('body', '2 matching entries');
     }
 
-    public function testArchiveBannerAndLiveToggleReflectWhetherStorageWasUsed(): void
+    public function testArchiveBannerAppearsOnlyWhenStorageWasUsed(): void
     {
         $client = $this->loginAsUser();
         $this->makeEntry('web-01', 5, 'normal recent browsing', new \DateTimeImmutable());
 
         $crawler = $client->request('GET', '/');
         self::assertSelectorTextNotContains('body', 'reconstructed from storage');
-        self::assertCount(1, $crawler->filter('#live-toggle'));
 
         $this->writeArchivedObject('web-01/2026/07/01/00-00.log.gz', [
             $this->line('2026-07-01T00:01:00+00:00', 'archived line'),
@@ -428,6 +427,24 @@ class DashboardControllerTest extends WebTestCase
 
         $crawler = $client->request('GET', '/', ['from' => '2026-06-01T00:00']);
         self::assertSelectorTextContains('body', 'reconstructed from storage');
-        self::assertCount(0, $crawler->filter('#live-toggle'));
+    }
+
+    public function testLiveToggleStaysAvailableEvenWhenArchiveWasUsed(): void
+    {
+        // updates() polls log_entry directly for rows newer than the page's
+        // latest id — anything that's arrived since page load is always
+        // fresh, never-pruned data, regardless of what the initial page
+        // load itself needed to pull from storage. So Live tail is exactly
+        // as meaningful here as on a normal, fully-cached browse.
+        $client = $this->loginAsUser();
+        $this->makeEntry('web-01', 5, 'recent, still in db', new \DateTimeImmutable());
+        $this->writeArchivedObject('web-01/2026/07/01/00-00.log.gz', [
+            $this->line('2026-07-01T00:01:00+00:00', 'archived line'),
+        ]);
+
+        $crawler = $client->request('GET', '/', ['from' => '2026-06-01T00:00']);
+
+        self::assertSelectorTextContains('body', 'reconstructed from storage');
+        self::assertCount(1, $crawler->filter('#live-toggle'));
     }
 }

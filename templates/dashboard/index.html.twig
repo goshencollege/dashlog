@@ -78,7 +78,7 @@
         <div class="d-flex align-items-center justify-content-between mb-3">
             <h1 class="h3 mb-0"><i class="bi bi-clipboard-data-fill me-2"></i>Logs</h1>
             <div class="d-flex align-items-center gap-3">
-                {% if page == 1 and not usingArchive %}
+                {% if page == 1 %}
                 <div class="form-check form-switch mb-0">
                     <input class="form-check-input" type="checkbox" role="switch" id="live-toggle">
                     <label class="form-check-label small" for="live-toggle">
@@ -221,7 +221,7 @@
     });
 })();
 </script>
-{% if page == 1 and not usingArchive %}
+{% if page == 1 %}
 <script>
 (function () {
     var toggle = document.getElementById('live-toggle');
