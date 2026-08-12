@@ -8,6 +8,7 @@ use App\Enum\StorageBackendType;
 use App\Service\LogObjectMigrationService;
 use App\Service\StorageService;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\Persistence\ManagerRegistry;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 
 class LogObjectMigrationServiceTest extends KernelTestCase
@@ -90,6 +91,30 @@ class LogObjectMigrationServiceTest extends KernelTestCase
             self::assertNotNull($logObject->getLastError());
             self::assertTrue($this->storageService->exists($this->source, 'web-01/2026/08/11/14-15.log.gz'), 'source must not be deleted on a failed migration');
         }
+    }
+
+    public function testMigrateRecoversAfterEntityManagerIsClosedByAPriorFailure(): void
+    {
+        // Doctrine permanently closes an EntityManager after any failed
+        // flush (a deadlock, a dropped connection, anything) — every later
+        // call on that same instance keeps throwing after that. The
+        // scheduled tiering/spool-drain sweeps reuse the same injected
+        // services across hundreds of objects in one call, so this must
+        // self-heal rather than fail every remaining object in the sweep.
+        // Simulate the "already closed" precondition directly rather than
+        // trying to trigger a real flush failure.
+        $logObject = $this->writeObject($this->source, 'web-01/2026/08/11/14-15.log.gz', 'hello world');
+        $logObjectId = $logObject->getId();
+        $this->em->close();
+
+        $this->migrationService->migrate($logObject, $this->destination);
+
+        // The closed EM from above is now stale; fetch a fresh one to verify.
+        $em = self::getContainer()->get(ManagerRegistry::class)->resetManager();
+        $fresh = $em->find(LogObject::class, $logObjectId);
+        self::assertSame($this->destination->getId(), $fresh->getStorageBackend()->getId());
+        self::assertSame('stored', $fresh->getStatus());
+        self::assertNull($fresh->getLastError());
     }
 
     public function testMigratingAPendingObjectThrows(): void

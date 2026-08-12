@@ -5,6 +5,7 @@ namespace App\Service;
 use App\Entity\LogObject;
 use App\Entity\StorageBackend;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\Persistence\ManagerRegistry;
 
 /**
  * Moves a single LogObject from its current backend to another one, used by
@@ -16,18 +17,32 @@ use Doctrine\ORM\EntityManagerInterface;
  * from wherever it currently, correctly, points — never a dangling
  * reference and never a silent loss. Re-running migrate() on a
  * partially-migrated object is safe: it just repeats the copy.
+ *
+ * Called from the scheduled tiering/spool-drain sweeps, which loop over
+ * many hundreds of objects in one call — if any single flush fails for any
+ * reason (a dropped DB connection, a deadlock), Doctrine closes that
+ * EntityManager permanently, and every later object in the same sweep
+ * would otherwise fail too. entityManager() resolves a fresh one via
+ * ManagerRegistry when that happens (same fix as LogBatchWriter's, for the
+ * same reason), and $logObject/$destination are re-fetched through it so
+ * they're never operated on while detached from whichever manager is
+ * actually current.
  */
 class LogObjectMigrationService
 {
     public function __construct(
         private readonly StorageService $storageService,
         private readonly KeyScheme $keyScheme,
-        private readonly EntityManagerInterface $em,
+        private readonly ManagerRegistry $doctrine,
     ) {
     }
 
     public function migrate(LogObject $logObject, StorageBackend $destination): void
     {
+        $em = $this->entityManager();
+        $logObject = $em->find(LogObject::class, $logObject->getId()) ?? $logObject;
+        $destination = $em->find(StorageBackend::class, $destination->getId()) ?? $destination;
+
         if ($logObject->getStatus() === 'pending') {
             // Entries recorded for visibility, but no bytes written to
             // storage yet — there's nothing to copy. Callers are expected to
@@ -48,7 +63,7 @@ class LogObjectMigrationService
         $metaKey = $this->keyScheme->metaKeyFor($key);
 
         $logObject->setStatus('migrating');
-        $this->em->flush();
+        $em->flush();
 
         try {
             $content = $this->storageService->read($source, $key);
@@ -76,16 +91,23 @@ class LogObjectMigrationService
             $logObject->setTierRank($destination->getTierRank());
             $logObject->setStatus('stored');
             $logObject->setLastError(null);
-            $this->em->flush();
+            $em->flush();
 
             $this->storageService->delete($source, $key);
             $this->storageService->delete($source, $metaKey);
         } catch (\Throwable $e) {
             $logObject->setStatus('error');
             $logObject->setLastError($e->getMessage());
-            $this->em->flush();
+            $em->flush();
 
             throw $e;
         }
+    }
+
+    private function entityManager(): EntityManagerInterface
+    {
+        $em = $this->doctrine->getManager();
+
+        return $em->isOpen() ? $em : $this->doctrine->resetManager();
     }
 }
