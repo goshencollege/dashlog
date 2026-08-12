@@ -10,6 +10,7 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Table(name: 'log_object')]
 #[ORM\UniqueConstraint(name: 'uniq_backend_object_key', columns: ['storage_backend_id', 'object_key'])]
 #[ORM\Index(name: 'idx_source_window_start', columns: ['source', 'window_start'])]
+#[ORM\Index(name: 'idx_entries_cached_window', columns: ['entries_cached', 'window_start'])]
 class LogObject
 {
     use AuditableTrait;
@@ -65,6 +66,14 @@ class LogObject
     #[ORM\Column(type: 'text', nullable: true)]
     private ?string $lastError = null;
 
+    // Whether this object's lines still have LogEntry rows in the DB.
+    // Starts true (recordEntries() always creates them) and is flipped to
+    // false only by LogEntryPruneService, only once it has actually
+    // deleted those rows. The browse path checks this instead of
+    // re-deriving a retention cutoff itself.
+    #[ORM\Column]
+    private bool $entriesCached = true;
+
     public function __construct()
     {
         $this->createdAt = new \DateTimeImmutable();
@@ -105,4 +114,7 @@ class LogObject
 
     public function getLastError(): ?string { return $this->lastError; }
     public function setLastError(?string $lastError): static { $this->lastError = $lastError; return $this; }
+
+    public function isEntriesCached(): bool { return $this->entriesCached; }
+    public function setEntriesCached(bool $entriesCached): static { $this->entriesCached = $entriesCached; return $this; }
 }

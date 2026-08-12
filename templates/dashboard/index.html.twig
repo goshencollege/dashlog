@@ -78,7 +78,7 @@
         <div class="d-flex align-items-center justify-content-between mb-3">
             <h1 class="h3 mb-0"><i class="bi bi-clipboard-data-fill me-2"></i>Logs</h1>
             <div class="d-flex align-items-center gap-3">
-                {% if page == 1 %}
+                {% if page == 1 and not usingArchive %}
                 <div class="form-check form-switch mb-0">
                     <input class="form-check-input" type="checkbox" role="switch" id="live-toggle">
                     <label class="form-check-label small" for="live-toggle">
@@ -89,6 +89,13 @@
                 <span class="text-muted small"><span id="entry-count-number">{{ total }}</span> matching {{ total == 1 ? 'entry' : 'entries' }}</span>
             </div>
         </div>
+
+        {% if usingArchive %}
+        <div class="alert alert-info py-2 small mb-3" role="alert">
+            <i class="bi bi-archive me-1"></i>
+            Some of these results were reconstructed from storage — this query is slower than normal browsing.
+        </div>
+        {% endif %}
 
         <form method="get" class="row g-2 mb-3 align-items-end">
             <div class="col-md-3">
@@ -214,7 +221,7 @@
     });
 })();
 </script>
-{% if page == 1 %}
+{% if page == 1 and not usingArchive %}
 <script>
 (function () {
     var toggle = document.getElementById('live-toggle');
