@@ -19,6 +19,19 @@ class LogObjectRepository extends ServiceEntityRepository
         return $this->findOneBy(['storageBackend' => $backend, 'objectKey' => $objectKey]);
     }
 
+    /**
+     * The catalog row for a batch, identified by (source, windowStart)
+     * rather than by its current backend/key — a batch's canonical key is
+     * fixed at creation, but it can move backends (spool → real, or
+     * between tiers) over its lifetime, and a late-arriving line for the
+     * same window must find it wherever it currently lives, not just
+     * while it's still on the spool.
+     */
+    public function findOneBySourceAndWindowStart(string $source, \DateTimeImmutable $windowStart): ?LogObject
+    {
+        return $this->findOneBy(['source' => $source, 'windowStart' => $windowStart]);
+    }
+
     /** @return LogObject[] */
     public function findEligibleForTiering(StorageBackend $backend, \DateTimeImmutable $cutoff): array
     {
