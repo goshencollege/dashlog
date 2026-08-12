@@ -16,6 +16,7 @@ RUN apk add --no-cache \
         intl \
         opcache \
         zip \
+        pcntl \
     # libsmbclient-php gives icewind/smb (CIFS backend) a native, in-process client
     # instead of shelling out to smbclient — faster and avoids the CLI wrapper's
     # write-completion race. samba-dev/build tools are build-only: libsmbclient

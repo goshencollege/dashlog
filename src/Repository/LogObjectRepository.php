@@ -92,4 +92,23 @@ class LogObjectRepository extends ServiceEntityRepository
 
         return $qb->getQuery()->getResult();
     }
+
+    /**
+     * 'pending' objects whose window closed well before $cutoff. LogIngestor
+     * tracks open windows only in process memory (see its docblock) — one
+     * can be abandoned forever if the process dies before finalizing it.
+     * Used by StalePendingObjectFinalizer as a safety net for exactly that.
+     *
+     * @return LogObject[]
+     */
+    public function findStalePending(\DateTimeImmutable $cutoff): array
+    {
+        return $this->createQueryBuilder('l')
+            ->where('l.status = :pending')
+            ->andWhere('l.windowEnd < :cutoff')
+            ->setParameter('pending', 'pending')
+            ->setParameter('cutoff', $cutoff)
+            ->getQuery()
+            ->getResult();
+    }
 }
