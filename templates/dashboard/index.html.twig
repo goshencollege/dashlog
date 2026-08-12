@@ -90,6 +90,13 @@
             </div>
         </div>
 
+        {% if usingArchive %}
+        <div class="alert alert-info py-2 small mb-3" role="alert">
+            <i class="bi bi-archive me-1"></i>
+            Some of these results were reconstructed from storage — this query is slower than normal browsing.
+        </div>
+        {% endif %}
+
         <form method="get" class="row g-2 mb-3 align-items-end">
             <div class="col-md-3">
                 <label class="form-label small mb-1">Source</label>

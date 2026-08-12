@@ -51,4 +51,32 @@ class LogObjectRepository extends ServiceEntityRepository
             ->getQuery()
             ->getResult();
     }
+
+    /**
+     * Objects overlapping [$from, $to] (either end open) whose LogEntry
+     * rows have already been pruned — i.e. the only way to see their
+     * content now is by reading it back from storage. Used by
+     * LogBrowseCoordinator to decide whether a browse/search query needs
+     * the archive fallback at all.
+     *
+     * @param string[] $sources
+     * @return LogObject[]
+     */
+    public function findUncachedOverlapping(?\DateTimeImmutable $from, ?\DateTimeImmutable $to, array $sources = []): array
+    {
+        $qb = $this->createQueryBuilder('l')
+            ->where('l.entriesCached = false');
+
+        if ($from !== null) {
+            $qb->andWhere('l.windowEnd >= :from')->setParameter('from', $from);
+        }
+        if ($to !== null) {
+            $qb->andWhere('l.windowStart <= :to')->setParameter('to', $to);
+        }
+        if ($sources !== []) {
+            $qb->andWhere('l.source IN (:sources)')->setParameter('sources', $sources);
+        }
+
+        return $qb->getQuery()->getResult();
+    }
 }

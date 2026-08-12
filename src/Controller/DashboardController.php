@@ -6,6 +6,7 @@ use App\Entity\LogEntry;
 use App\Enum\SyslogFacility;
 use App\Enum\SyslogSeverity;
 use App\Repository\LogEntryRepository;
+use App\Service\LogBrowseCoordinator;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -22,12 +23,12 @@ class DashboardController extends AbstractController
     }
 
     #[Route('/', name: 'dashboard')]
-    public function index(Request $request, LogEntryRepository $repo): Response
+    public function index(Request $request, LogBrowseCoordinator $browseCoordinator): Response
     {
         $page = max(1, (int) $request->query->get('page', 1));
         [$filters, $rawFilters] = $this->parseFilters($request);
 
-        $result = $repo->search($filters, $page, $this->logBrowsePageSize);
+        $result = $browseCoordinator->search($filters, $page, $this->logBrowsePageSize);
         $totalPages = max(1, (int) ceil($result['total'] / $this->logBrowsePageSize));
 
         return $this->render('dashboard/index.html.twig', [
@@ -37,7 +38,8 @@ class DashboardController extends AbstractController
             'totalPages' => $totalPages,
             'filters' => $rawFilters,
             'severities' => SyslogSeverity::cases(),
-            'latestEntryId' => $result['results'] === [] ? 0 : $result['results'][0]->getId(),
+            'latestEntryId' => $result['results'] === [] ? 0 : ($result['results'][0]->getId() ?? 0),
+            'usingArchive' => $result['usingArchive'],
         ]);
     }
 

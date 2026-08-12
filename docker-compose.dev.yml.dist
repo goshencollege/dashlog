@@ -60,10 +60,10 @@ services:
         max-size: "20m"
         max-file: "5"
 
-  # Handles async jobs, the tiering/spool-drain schedules, and failed-message retries.
+  # Handles async jobs, the tiering/spool-drain/log-entry-prune schedules, and failed-message retries.
   worker:
     <<: *worker-base
-    command: ["php", "bin/console", "messenger:consume", "async", "failed", "scheduler_tiering", "scheduler_spool_drain", "--time-limit=3600"]
+    command: ["php", "bin/console", "messenger:consume", "async", "failed", "scheduler_tiering", "scheduler_spool_drain", "scheduler_log_entry_prune", "--time-limit=3600"]
 
   # Receives syslog messages over UDP and batches/stores them.
   syslog:

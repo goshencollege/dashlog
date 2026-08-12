@@ -217,6 +217,40 @@ class LogEntryRepositoryTest extends KernelTestCase
         self::assertCount(2, $result);
     }
 
+    public function testFindAllMatchingReturnsEverythingUnpaginatedNewestFirst(): void
+    {
+        $this->makeEntry('web-01', 5, 'first', new \DateTimeImmutable('2026-08-11T10:00:00+00:00'));
+        $this->makeEntry('web-01', 5, 'second', new \DateTimeImmutable('2026-08-11T11:00:00+00:00'));
+
+        $result = $this->repo->findAllMatching([], 50);
+
+        self::assertCount(2, $result);
+        self::assertSame('second', $result[0]->getMessage());
+        self::assertSame('first', $result[1]->getMessage());
+    }
+
+    public function testFindAllMatchingAppliesFilters(): void
+    {
+        $this->makeEntry('web-01', 3, 'error line', new \DateTimeImmutable());
+        $this->makeEntry('web-01', 6, 'info line', new \DateTimeImmutable());
+
+        $result = $this->repo->findAllMatching(['severity' => [3]], 50);
+
+        self::assertCount(1, $result);
+        self::assertSame('error line', $result[0]->getMessage());
+    }
+
+    public function testFindAllMatchingRespectsLimit(): void
+    {
+        for ($i = 0; $i < 5; $i++) {
+            $this->makeEntry('web-01', 5, "line {$i}", new \DateTimeImmutable());
+        }
+
+        $result = $this->repo->findAllMatching([], 2);
+
+        self::assertCount(2, $result);
+    }
+
     private function makeEntry(string $source, int $severity, string $message, \DateTimeImmutable $timestamp): LogEntry
     {
         $entry = new LogEntry();

@@ -8,6 +8,7 @@ use App\Entity\SamlProvider;
 use App\Entity\StorageBackend;
 use App\Enum\StorageBackendType;
 use App\Security\SamlUser;
+use App\Service\StorageService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
@@ -16,26 +17,33 @@ class DashboardControllerTest extends WebTestCase
 {
     private KernelBrowser $client;
     private EntityManagerInterface $em;
+    private StorageService $storageService;
+    private StorageBackend $backend;
     private LogObject $logObject;
+    private string $archiveDir;
 
     protected function setUp(): void
     {
         $this->client = static::createClient();
         $this->em = static::getContainer()->get(EntityManagerInterface::class);
+        $this->storageService = static::getContainer()->get(StorageService::class);
 
         $this->em->createQuery('DELETE FROM App\Entity\LogEntry')->execute();
         $this->em->createQuery('DELETE FROM App\Entity\LogObject')->execute();
         $this->em->createQuery('DELETE FROM App\Entity\StorageBackend')->execute();
         $this->em->createQuery('DELETE FROM App\Entity\SamlProvider')->execute();
 
-        $backend = new StorageBackend();
-        $backend->setName('Test Backend');
-        $backend->setType(StorageBackendType::Local);
-        $backend->setPath('/tmp/unused-in-this-test');
-        $this->em->persist($backend);
+        $this->archiveDir = sys_get_temp_dir() . '/dashlog-dashboard-' . bin2hex(random_bytes(4));
+        mkdir($this->archiveDir);
+
+        $this->backend = new StorageBackend();
+        $this->backend->setName('Test Backend');
+        $this->backend->setType(StorageBackendType::Local);
+        $this->backend->setPath($this->archiveDir);
+        $this->em->persist($this->backend);
 
         $this->logObject = new LogObject();
-        $this->logObject->setStorageBackend($backend);
+        $this->logObject->setStorageBackend($this->backend);
         $this->logObject->setObjectKey('web-01/2026/08/11/00-00.log.gz');
         $this->logObject->setSource('web-01');
         $this->logObject->setWindowStart(new \DateTimeImmutable('2026-08-11T00:00:00+00:00'));
@@ -45,6 +53,73 @@ class DashboardControllerTest extends WebTestCase
         $this->logObject->setStatus('stored');
         $this->em->persist($this->logObject);
         $this->em->flush();
+    }
+
+    protected function tearDown(): void
+    {
+        $this->removeDirectory($this->archiveDir);
+        parent::tearDown();
+    }
+
+    private function removeDirectory(string $dir): void
+    {
+        if (!is_dir($dir)) {
+            return;
+        }
+
+        $items = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::CHILD_FIRST,
+        );
+
+        foreach ($items as $item) {
+            $item->isDir() ? rmdir($item->getPathname()) : unlink($item->getPathname());
+        }
+
+        rmdir($dir);
+    }
+
+    /** @param array<string, mixed>[] $lines */
+    private function writeArchivedObject(string $key, array $lines): LogObject
+    {
+        $content = '';
+        foreach ($lines as $line) {
+            $content .= json_encode($line, JSON_THROW_ON_ERROR) . "\n";
+        }
+        $gzipped = gzencode($content, 9);
+        $this->storageService->write($this->backend, $key, $gzipped);
+
+        $object = new LogObject();
+        $object->setStorageBackend($this->backend);
+        $object->setObjectKey($key);
+        $object->setSource($lines[0]['source']);
+        $object->setWindowStart(new \DateTimeImmutable($lines[0]['timestamp']));
+        $object->setWindowEnd(new \DateTimeImmutable($lines[count($lines) - 1]['timestamp']));
+        $object->setSizeBytes(strlen($gzipped));
+        $object->setChecksumSha256(hash('sha256', $gzipped));
+        $object->setEntryCount(count($lines));
+        $object->setStatus('stored');
+        $object->setEntriesCached(false);
+        $this->em->persist($object);
+        $this->em->flush();
+
+        return $object;
+    }
+
+    /** @return array<string, mixed> */
+    private function line(string $timestamp, string $message): array
+    {
+        return [
+            'source' => 'web-01',
+            'timestamp' => $timestamp,
+            'host' => null,
+            'appName' => null,
+            'procId' => null,
+            'severity' => 5,
+            'facility' => 4,
+            'message' => $message,
+            'raw' => $message,
+        ];
     }
 
     private function loginAsUser(): KernelBrowser
@@ -306,5 +381,70 @@ class DashboardControllerTest extends WebTestCase
         self::assertResponseIsSuccessful();
         self::assertSelectorTextContains('body', 'Page 2 of 2');
         self::assertCount(1, $crawler->filter('tbody tr'));
+    }
+
+    public function testBrowsingAPrunedObjectsRangeReconstructsEntriesFromStorage(): void
+    {
+        $client = $this->loginAsUser();
+        $this->writeArchivedObject('web-01/2026/07/01/00-00.log.gz', [
+            $this->line('2026-07-01T00:01:00+00:00', 'only in storage now'),
+        ]);
+
+        $crawler = $client->request('GET', '/', ['from' => '2026-06-01T00:00']);
+
+        self::assertResponseIsSuccessful();
+        self::assertSelectorTextContains('body', 'only in storage now');
+        self::assertSelectorTextContains('body', '1 matching entry');
+    }
+
+    public function testBrowsingAMixOfCachedAndUncachedObjectsReturnsBoth(): void
+    {
+        $client = $this->loginAsUser();
+        $this->makeEntry('web-01', 5, 'recent, still in db', new \DateTimeImmutable('2026-08-11T00:05:00+00:00'));
+        $this->writeArchivedObject('web-01/2026/07/01/00-00.log.gz', [
+            $this->line('2026-07-01T00:01:00+00:00', 'old, only in storage'),
+        ]);
+
+        $crawler = $client->request('GET', '/', ['from' => '2026-06-01T00:00']);
+
+        self::assertResponseIsSuccessful();
+        self::assertSelectorTextContains('body', 'recent, still in db');
+        self::assertSelectorTextContains('body', 'old, only in storage');
+        self::assertSelectorTextContains('body', '2 matching entries');
+    }
+
+    public function testArchiveBannerAppearsOnlyWhenStorageWasUsed(): void
+    {
+        $client = $this->loginAsUser();
+        $this->makeEntry('web-01', 5, 'normal recent browsing', new \DateTimeImmutable());
+
+        $crawler = $client->request('GET', '/');
+        self::assertSelectorTextNotContains('body', 'reconstructed from storage');
+
+        $this->writeArchivedObject('web-01/2026/07/01/00-00.log.gz', [
+            $this->line('2026-07-01T00:01:00+00:00', 'archived line'),
+        ]);
+
+        $crawler = $client->request('GET', '/', ['from' => '2026-06-01T00:00']);
+        self::assertSelectorTextContains('body', 'reconstructed from storage');
+    }
+
+    public function testLiveToggleStaysAvailableEvenWhenArchiveWasUsed(): void
+    {
+        // updates() polls log_entry directly for rows newer than the page's
+        // latest id — anything that's arrived since page load is always
+        // fresh, never-pruned data, regardless of what the initial page
+        // load itself needed to pull from storage. So Live tail is exactly
+        // as meaningful here as on a normal, fully-cached browse.
+        $client = $this->loginAsUser();
+        $this->makeEntry('web-01', 5, 'recent, still in db', new \DateTimeImmutable());
+        $this->writeArchivedObject('web-01/2026/07/01/00-00.log.gz', [
+            $this->line('2026-07-01T00:01:00+00:00', 'archived line'),
+        ]);
+
+        $crawler = $client->request('GET', '/', ['from' => '2026-06-01T00:00']);
+
+        self::assertSelectorTextContains('body', 'reconstructed from storage');
+        self::assertCount(1, $crawler->filter('#live-toggle'));
     }
 }

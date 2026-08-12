@@ -57,6 +57,27 @@ class LogEntryRepository extends ServiceEntityRepository
         return $qb->getQuery()->getResult();
     }
 
+    /**
+     * Every LogEntry matching filters, unpaginated (capped at $limit) and
+     * newest first — used by LogBrowseCoordinator to merge with archive
+     * results when part of a query's range has been pruned. Normal
+     * browsing should use search() instead; this exists only for that
+     * merge path, where both sources need to be sorted/paginated together
+     * in PHP rather than at the DB level.
+     *
+     * @param array{source?: string[], severity?: int[], message?: string, from?: \DateTimeImmutable, to?: \DateTimeImmutable} $filters
+     * @return LogEntry[]
+     */
+    public function findAllMatching(array $filters, int $limit): array
+    {
+        $qb = $this->createQueryBuilder('l')
+            ->orderBy('l.timestamp', 'DESC')
+            ->setMaxResults($limit);
+        $this->applyFilters($qb, $filters);
+
+        return $qb->getQuery()->getResult();
+    }
+
     /** @param array{source?: string[], severity?: int[], message?: string, from?: \DateTimeImmutable, to?: \DateTimeImmutable} $filters */
     private function applyFilters(QueryBuilder $qb, array $filters): void
     {
