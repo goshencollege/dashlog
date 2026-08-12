@@ -160,6 +160,10 @@ class LogBatchWriter
         if ($logObject->getStatus() !== 'stored') {
             $logObject->setStatus('staged');
         }
+        // A successful finalize means the object is in a good state now,
+        // regardless of what happened on any earlier attempt — don't leave
+        // a stale error message attached to it.
+        $logObject->setLastError(null);
         $em->persist($logObject);
         $em->flush();
     }

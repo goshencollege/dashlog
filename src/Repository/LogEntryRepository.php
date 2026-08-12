@@ -82,7 +82,7 @@ class LogEntryRepository extends ServiceEntityRepository
     /**
      * Every LogEntry for one LogObject, oldest first — used to reconstruct
      * a batch's lines when the in-memory buffer that would normally have
-     * produced them is gone (see StalePendingObjectFinalizer).
+     * produced them is gone (see OrphanedLogObjectFinalizer).
      *
      * @return LogEntry[]
      */

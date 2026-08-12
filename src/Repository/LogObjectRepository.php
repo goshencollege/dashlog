@@ -97,7 +97,7 @@ class LogObjectRepository extends ServiceEntityRepository
      * 'pending' objects whose window closed well before $cutoff. LogIngestor
      * tracks open windows only in process memory (see its docblock) — one
      * can be abandoned forever if the process dies before finalizing it.
-     * Used by StalePendingObjectFinalizer as a safety net for exactly that.
+     * Used by OrphanedLogObjectFinalizer as a safety net for exactly that.
      *
      * @return LogObject[]
      */
