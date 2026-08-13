@@ -56,7 +56,7 @@ class HealthCheckServiceTest extends KernelTestCase
         self::assertFalse($health['hasActiveBackend']);
     }
 
-    public function testSpoolBacklogIsReportedWithOldestFirst(): void
+    public function testSpoolBacklogIsReportedOldestFirst(): void
     {
         $older = $this->makeSpoolObject('web-01', 'staged');
         $newer = $this->makeSpoolObject('web-02', 'staged');
@@ -64,11 +64,11 @@ class HealthCheckServiceTest extends KernelTestCase
         $health = $this->healthCheckService->check();
 
         self::assertSame(2, $health['spoolBacklogCount']);
-        self::assertSame($older->getId(), $health['oldestSpoolObject']->getId());
-        self::assertSame($newer->getId(), $health['spoolObjects'][1]->getId());
+        self::assertSame($older->getId(), $health['spoolObjects'][0]['object']->getId());
+        self::assertSame($newer->getId(), $health['spoolObjects'][1]['object']->getId());
     }
 
-    public function testFreshSpoolBacklogIsNotFlaggedAsStale(): void
+    public function testFreshStagedObjectIsNotFlaggedAsStale(): void
     {
         $this->makeSpoolObject('web-01', 'staged');
 
@@ -78,7 +78,7 @@ class HealthCheckServiceTest extends KernelTestCase
         self::assertFalse($health['hasStaleSpoolBacklog']);
     }
 
-    public function testOldSpoolBacklogIsFlaggedAsStale(): void
+    public function testStagedObjectSittingForSeveralDrainCyclesIsFlaggedAsStale(): void
     {
         $object = $this->makeSpoolObject('web-01', 'staged');
         $this->ageUpdatedAt($object, new \DateTimeImmutable('-1 hour'));
@@ -86,20 +86,35 @@ class HealthCheckServiceTest extends KernelTestCase
         $health = $this->healthCheckService->check();
 
         self::assertTrue($health['hasStaleSpoolBacklog']);
+        self::assertSame(1, $health['staleSpoolBacklogCount']);
     }
 
-    public function testPendingSpoolObjectsAreExcludedFromTheBacklog(): void
+    public function testFreshlyOpenedPendingObjectIsIncludedButNotFlaggedAsStale(): void
     {
-        $pending = $this->makeSpoolObject('web-01', 'pending');
-        // Its window opened well over an hour ago — if pending objects were
-        // counted, this alone would already trip the staleness check.
-        $this->ageUpdatedAt($pending, new \DateTimeImmutable('-1 hour'));
+        // makeSpoolObject's windowEnd defaults to "now" — a window that
+        // just opened, same as real ingestion traffic between window
+        // start and close.
+        $this->makeSpoolObject('web-01', 'pending');
 
         $health = $this->healthCheckService->check();
 
-        self::assertSame(0, $health['spoolBacklogCount']);
-        self::assertNull($health['oldestSpoolObject']);
+        self::assertSame(1, $health['spoolBacklogCount']);
         self::assertFalse($health['hasStaleSpoolBacklog']);
+    }
+
+    public function testPendingObjectPastItsWindowByALongMarginIsFlaggedAsStale(): void
+    {
+        $object = $this->makeSpoolObject('web-01', 'pending');
+        // Its window closed 2 hours ago and nothing ever finalized it —
+        // this is exactly the "listener crashed mid-window" scenario
+        // OrphanedLogObjectFinalizer eventually reclaims.
+        $object->setWindowEnd(new \DateTimeImmutable('-2 hours'));
+        $this->em->flush();
+
+        $health = $this->healthCheckService->check();
+
+        self::assertTrue($health['hasStaleSpoolBacklog']);
+        self::assertSame(1, $health['staleSpoolBacklogCount']);
     }
 
     /**

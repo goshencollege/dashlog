@@ -6,6 +6,7 @@ parameters:
     default_log_visibility_flush_seconds: 5
     default_log_entry_retention_days: 30
     default_log_spool_drain_interval_seconds: 60
+    default_log_pending_stale_seconds: 3600
 
 services:
     _defaults:
@@ -49,10 +50,15 @@ services:
     App\Service\HealthCheckService:
         arguments:
             $spoolDrainIntervalSeconds: '%env(int:default:default_log_spool_drain_interval_seconds:LOG_SPOOL_DRAIN_INTERVAL_SECONDS)%'
+            $pendingStaleSeconds: '%env(int:default:default_log_pending_stale_seconds:LOG_PENDING_STALE_SECONDS)%'
 
     App\Scheduler\SpoolDrainSchedule:
         arguments:
             $intervalSeconds: '%env(int:default:default_log_spool_drain_interval_seconds:LOG_SPOOL_DRAIN_INTERVAL_SECONDS)%'
+
+    App\Service\OrphanedLogObjectFinalizer:
+        arguments:
+            $pendingStaleSeconds: '%env(int:default:default_log_pending_stale_seconds:LOG_PENDING_STALE_SECONDS)%'
 
     Symfony\Component\HttpFoundation\Session\Storage\Handler\PdoSessionHandler:
         arguments:
