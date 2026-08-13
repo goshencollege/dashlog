@@ -104,12 +104,6 @@
                             {{ health.spoolBacklogCount }} object(s) currently on the spool.
                             {{ health.staleSpoolBacklogCount }} of them have been waiting longer than expected — see below.
                         </div>
-                    {% else %}
-                        <div class="alert alert-info">
-                            <i class="bi bi-info-circle-fill me-1"></i>
-                            {{ health.spoolBacklogCount }} object(s) currently on the spool, waiting to move to real storage.
-                            This is normal — the spool drains automatically on a regular schedule.
-                        </div>
                     {% endif %}
                     <div class="table-responsive scrollable-table-body">
                         <table class="table table-sm mb-0">

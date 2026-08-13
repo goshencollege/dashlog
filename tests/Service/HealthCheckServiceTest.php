@@ -117,6 +117,18 @@ class HealthCheckServiceTest extends KernelTestCase
         self::assertSame(1, $health['staleSpoolBacklogCount']);
     }
 
+    public function testErrorSpoolObjectIsFlaggedAsStaleImmediately(): void
+    {
+        // A drain attempt already failed for this one — no need to wait
+        // out a grace period before surfacing it.
+        $this->makeSpoolObject('web-01', 'error');
+
+        $health = $this->healthCheckService->check();
+
+        self::assertTrue($health['hasStaleSpoolBacklog']);
+        self::assertSame(1, $health['staleSpoolBacklogCount']);
+    }
+
     /**
      * Bypasses AuditListener's preUpdate (which would otherwise reset
      * updatedAt back to "now" on any ORM-tracked change) to simulate an

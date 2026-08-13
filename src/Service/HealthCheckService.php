@@ -90,14 +90,21 @@ class HealthCheckService
      */
     private function describeSpoolObject(LogObject $object, \DateTimeImmutable $now): array
     {
+        // An 'error' object means a drain attempt already failed — that's
+        // worth flagging immediately, not just once it's been sitting
+        // around for a while.
+        if ($object->getStatus() === 'error') {
+            return ['object' => $object, 'since' => $object->getUpdatedAt(), 'isStale' => true];
+        }
+
         // 'pending' objects (window still open, nothing written yet — see
         // SpoolDrainService's docblock) are expected to sit here for up to
         // a full batch window; only worth flagging once they've outlived
         // that window by the same margin OrphanedLogObjectFinalizer uses to
         // treat one as orphaned, since that's this app's one existing
         // definition of "a pending object has been open too long."
-        // Anything else (staged/error) should already be moving on a
-        // regular drain cadence, so "since" is when it last changed state.
+        // 'staged' objects should already be moving on a regular drain
+        // cadence, so "since" is when it last changed state.
         if ($object->getStatus() === 'pending') {
             $since = $object->getWindowEnd();
             $cutoff = $now->modify(sprintf('-%d seconds', $this->pendingStaleSeconds));
