@@ -45,7 +45,7 @@ class SamlAuthenticator extends AbstractAuthenticator implements AuthenticationE
         $errors = $auth->getErrors();
         if (!empty($errors) || !$auth->isAuthenticated()) {
             $reason = $auth->getLastErrorReason() ?? implode(', ', $errors);
-            $this->logger->error('SAML authentication failed', ['reason' => $reason, 'errors' => $errors]);
+            $this->logger->error('SAML authentication failed: {reason}', ['reason' => $reason, 'errors' => $errors]);
             throw new AuthenticationException('SAML error: ' . $reason);
         }
 

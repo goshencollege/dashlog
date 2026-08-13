@@ -58,10 +58,11 @@ class LogArchiveSearchService
                 throw new \RuntimeException('gzdecode failed');
             }
         } catch (\Throwable $e) {
-            $this->logger->warning('Skipping a LogObject in archive search: could not read/decompress its stored content.', [
+            $this->logger->warning('Skipping log object {logObjectId} ({objectKey}) on backend {backendId} in archive search: could not read/decompress its stored content: {error}', [
                 'logObjectId' => $object->getId(),
                 'objectKey' => $object->getObjectKey(),
                 'backendId' => $object->getStorageBackend()->getId(),
+                'error' => $e->getMessage(),
                 'exception' => $e,
             ]);
 

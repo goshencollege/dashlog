@@ -39,7 +39,7 @@ class SpoolDrainService
 
         $target = $this->storageBackendRepository->findActiveOrderedByTier()[0] ?? null;
         if ($target === null) {
-            $this->logger->error('Cannot drain the write-ahead spool: no active storage backend is configured.', [
+            $this->logger->error('Cannot drain the write-ahead spool: no active storage backend is configured ({stagedCount} object(s) waiting).', [
                 'stagedCount' => count($staged),
             ]);
 
@@ -50,8 +50,9 @@ class SpoolDrainService
             try {
                 $this->migrationService->migrate($logObject, $target);
             } catch (\Throwable $e) {
-                $this->logger->error('Failed to drain a log object from the spool, will retry next sweep.', [
+                $this->logger->error('Failed to drain log object {logObjectId} from the spool, will retry next sweep: {error}', [
                     'logObjectId' => $logObject->getId(),
+                    'error' => $e->getMessage(),
                     'exception' => $e,
                 ]);
             }

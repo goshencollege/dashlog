@@ -90,8 +90,9 @@ class SyslogListenCommand extends Command
                         $line = $this->parser->parse($data, $this->peerAddress($peer), new \DateTimeImmutable());
                         $this->ingestor->ingest($line);
                     } catch (\Throwable $e) {
-                        $this->logger->error('Failed to process an incoming syslog datagram.', [
+                        $this->logger->error('Failed to process an incoming syslog datagram from {peer}: {error}', [
                             'peer' => $peer,
+                            'error' => $e->getMessage(),
                             'exception' => $e,
                         ]);
                     }
@@ -107,7 +108,7 @@ class SyslogListenCommand extends Command
                 try {
                     $this->ingestor->flushForVisibility();
                 } catch (\Throwable $e) {
-                    $this->logger->error('Unexpected error while flushing log entries for visibility.', ['exception' => $e]);
+                    $this->logger->error('Unexpected error while flushing log entries for visibility: {error}', ['error' => $e->getMessage(), 'exception' => $e]);
                 }
 
                 // Doctrine's debug/profiler middleware logs every query plus
@@ -127,7 +128,7 @@ class SyslogListenCommand extends Command
             try {
                 $this->ingestor->flushExpiredWindows($now);
             } catch (\Throwable $e) {
-                $this->logger->error('Unexpected error while flushing log batches.', ['exception' => $e]);
+                $this->logger->error('Unexpected error while flushing log batches: {error}', ['error' => $e->getMessage(), 'exception' => $e]);
             }
         }
 
@@ -135,7 +136,7 @@ class SyslogListenCommand extends Command
         try {
             $this->ingestor->flushAll(new \DateTimeImmutable());
         } catch (\Throwable $e) {
-            $this->logger->error('Failed to flush open windows during graceful shutdown.', ['exception' => $e]);
+            $this->logger->error('Failed to flush open windows during graceful shutdown: {error}', ['error' => $e->getMessage(), 'exception' => $e]);
         }
 
         return Command::SUCCESS;

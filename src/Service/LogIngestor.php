@@ -79,9 +79,10 @@ class LogIngestor
                     );
                     $bucket['pendingEntryLines'] = [];
                 } catch (\Throwable $e) {
-                    $this->logger->error('Failed to record log entries for visibility, will retry next tick.', [
+                    $this->logger->error('Failed to record log entries for visibility for {source} window starting {windowStart}, will retry next tick: {error}', [
                         'source' => $source,
                         'windowStart' => $bucket['start']->format(\DateTimeInterface::ATOM),
+                        'error' => $e->getMessage(),
                         'exception' => $e,
                     ]);
                 }
@@ -113,9 +114,10 @@ class LogIngestor
                     $this->batchWriter->finalize($source, $bucket['start'], $bucket['end'], $bucket['lines'], $bucket['logObject']);
                     unset($this->buffers[$source][$windowKey]);
                 } catch (\Throwable $e) {
-                    $this->logger->error('Failed to flush log batch, will retry next tick.', [
+                    $this->logger->error('Failed to flush log batch for {source} window starting {windowStart}, will retry next tick: {error}', [
                         'source' => $source,
                         'windowStart' => $bucket['start']->format(\DateTimeInterface::ATOM),
+                        'error' => $e->getMessage(),
                         'exception' => $e,
                     ]);
                 }

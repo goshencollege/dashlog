@@ -56,7 +56,7 @@ class LogBrowseCoordinator
         $dbEntries = $this->logEntryRepository->findAllMatching($filters, $this->maxMergeDbResults);
 
         if (count($dbEntries) === $this->maxMergeDbResults) {
-            $this->logger->warning('Archive-merged browse query hit the DB-side result cap; results may be truncated.', [
+            $this->logger->warning('Archive-merged browse query hit the DB-side result cap of {cap}; results may be truncated.', [
                 'cap' => $this->maxMergeDbResults,
             ]);
         }
