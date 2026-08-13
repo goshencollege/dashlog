@@ -61,7 +61,7 @@ class OrphanedLogObjectFinalizer
             try {
                 $entries = $this->logEntryRepository->findByLogObject($logObject);
                 if ($entries === []) {
-                    $this->logger->warning('Orphaned LogObject has no LogEntry rows to reconstruct from, skipping.', [
+                    $this->logger->warning('Orphaned log object {logObjectId} ({objectKey}) has no LogEntry rows to reconstruct from, skipping.', [
                         'logObjectId' => $logObject->getId(),
                         'objectKey' => $logObject->getObjectKey(),
                     ]);
@@ -77,9 +77,10 @@ class OrphanedLogObjectFinalizer
                 );
                 $finalized++;
             } catch (\Throwable $e) {
-                $this->logger->error('Failed to finalize an orphaned log object, will retry next sweep.', [
+                $this->logger->error('Failed to finalize orphaned log object {logObjectId} ({objectKey}), will retry next sweep: {error}', [
                     'logObjectId' => $logObject->getId(),
                     'objectKey' => $logObject->getObjectKey(),
+                    'error' => $e->getMessage(),
                     'exception' => $e,
                 ]);
             }

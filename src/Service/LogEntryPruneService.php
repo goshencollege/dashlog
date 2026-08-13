@@ -68,7 +68,7 @@ class LogEntryPruneService
             ->getQuery()
             ->execute();
 
-        $this->logger->info('Pruned old log entries now only readable from storage.', [
+        $this->logger->info('Pruned {entryRowCount} log entry row(s) across {logObjectCount} log object(s) older than {cutoffAt}, now only readable from storage.', [
             'logObjectCount' => count($ids),
             'entryRowCount' => $deletedRows,
             'cutoffAt' => $cutoff->format(\DateTimeInterface::ATOM),

@@ -40,10 +40,11 @@ class TieringService
                 try {
                     $this->migrationService->migrate($logObject, $next);
                 } catch (\Throwable $e) {
-                    $this->logger->error('Failed to tier log object, will retry next sweep.', [
+                    $this->logger->error('Failed to tier log object {logObjectId} from {from} to {to}, will retry next sweep: {error}', [
                         'logObjectId' => $logObject->getId(),
                         'from' => $current->getName(),
                         'to' => $next->getName(),
+                        'error' => $e->getMessage(),
                         'exception' => $e,
                     ]);
                 }
