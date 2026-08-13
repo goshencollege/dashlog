@@ -5,6 +5,7 @@ parameters:
     default_log_browse_page_size: 50
     default_log_visibility_flush_seconds: 5
     default_log_entry_retention_days: 30
+    default_log_spool_stale_seconds: 300
 
 services:
     _defaults:
@@ -45,6 +46,10 @@ services:
     App\Service\LogEntryPruneService:
         arguments:
             $retentionDays: '%env(int:default:default_log_entry_retention_days:LOG_ENTRY_RETENTION_DAYS)%'
+
+    App\Service\HealthCheckService:
+        arguments:
+            $staleSpoolBacklogSeconds: '%env(int:default:default_log_spool_stale_seconds:LOG_SPOOL_STALE_SECONDS)%'
 
     Symfony\Component\HttpFoundation\Session\Storage\Handler\PdoSessionHandler:
         arguments:

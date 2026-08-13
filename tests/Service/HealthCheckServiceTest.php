@@ -68,6 +68,27 @@ class HealthCheckServiceTest extends KernelTestCase
         self::assertSame($newer->getId(), $health['spoolObjects'][1]->getId());
     }
 
+    public function testFreshSpoolBacklogIsNotFlaggedAsStale(): void
+    {
+        $this->makeSpoolObject('web-01', 'staged');
+
+        $health = $this->healthCheckService->check();
+
+        self::assertSame(1, $health['spoolBacklogCount']);
+        self::assertFalse($health['hasStaleSpoolBacklog']);
+    }
+
+    public function testOldSpoolBacklogIsFlaggedAsStale(): void
+    {
+        $object = $this->makeSpoolObject('web-01', 'staged');
+        $object->setCreatedAt(new \DateTimeImmutable('-1 hour'));
+        $this->em->flush();
+
+        $health = $this->healthCheckService->check();
+
+        self::assertTrue($health['hasStaleSpoolBacklog']);
+    }
+
     public function testCatalogErrorsAreReported(): void
     {
         $backend = $this->makeBackend('Real Backend', isActive: true);

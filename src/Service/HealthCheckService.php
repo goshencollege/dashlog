@@ -22,6 +22,7 @@ class HealthCheckService
         private readonly LogEntryRepository $logEntryRepository,
         private readonly SpoolProvider $spoolProvider,
         private readonly Connection $connection,
+        private readonly int $staleSpoolBacklogSeconds,
     ) {
     }
 
@@ -32,6 +33,7 @@ class HealthCheckService
      *     spoolObjects: LogObject[],
      *     spoolBacklogCount: int,
      *     oldestSpoolObject: LogObject|null,
+     *     hasStaleSpoolBacklog: bool,
      *     catalogErrors: LogObject[],
      *     lastLogEntry: \App\Entity\LogEntry|null,
      *     failedMessageCount: int,
@@ -44,6 +46,14 @@ class HealthCheckService
 
         $spool = $this->spoolProvider->getSpool();
         $spoolObjects = $this->logObjectRepository->findBy(['storageBackend' => $spool], ['createdAt' => 'ASC']);
+        $oldestSpoolObject = $spoolObjects[0] ?? null;
+
+        // The spool drains every minute under normal operation, so a
+        // handful of objects sitting there briefly is expected, not an
+        // issue — only flag it once the oldest one has outlived that by a
+        // comfortable margin.
+        $staleCutoff = (new \DateTimeImmutable())->modify(sprintf('-%d seconds', $this->staleSpoolBacklogSeconds));
+        $hasStaleSpoolBacklog = $oldestSpoolObject !== null && $oldestSpoolObject->getCreatedAt() < $staleCutoff;
 
         $catalogErrors = $this->logObjectRepository->findBy(['status' => 'error']);
 
@@ -59,7 +69,8 @@ class HealthCheckService
             'hasActiveBackend' => $hasActiveBackend,
             'spoolObjects' => $spoolObjects,
             'spoolBacklogCount' => count($spoolObjects),
-            'oldestSpoolObject' => $spoolObjects[0] ?? null,
+            'oldestSpoolObject' => $oldestSpoolObject,
+            'hasStaleSpoolBacklog' => $hasStaleSpoolBacklog,
             'catalogErrors' => $catalogErrors,
             'lastLogEntry' => $lastLogEntry,
             'failedMessageCount' => $failedMessageCount,
