@@ -5,7 +5,7 @@ parameters:
     default_log_browse_page_size: 50
     default_log_visibility_flush_seconds: 5
     default_log_entry_retention_days: 30
-    default_log_spool_stale_seconds: 300
+    default_log_spool_drain_interval_seconds: 60
 
 services:
     _defaults:
@@ -48,7 +48,11 @@ services:
 
     App\Service\HealthCheckService:
         arguments:
-            $staleSpoolBacklogSeconds: '%env(int:default:default_log_spool_stale_seconds:LOG_SPOOL_STALE_SECONDS)%'
+            $spoolDrainIntervalSeconds: '%env(int:default:default_log_spool_drain_interval_seconds:LOG_SPOOL_DRAIN_INTERVAL_SECONDS)%'
+
+    App\Scheduler\SpoolDrainSchedule:
+        arguments:
+            $intervalSeconds: '%env(int:default:default_log_spool_drain_interval_seconds:LOG_SPOOL_DRAIN_INTERVAL_SECONDS)%'
 
     Symfony\Component\HttpFoundation\Session\Storage\Handler\PdoSessionHandler:
         arguments:

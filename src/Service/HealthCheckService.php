@@ -16,13 +16,19 @@ use Doctrine\DBAL\Connection;
  */
 class HealthCheckService
 {
+    // How many drain cycles' worth of delay to tolerate before the oldest
+    // spool object counts as stale, rather than a fixed number of seconds —
+    // ties the health page's grace period to SpoolDrainSchedule's actual
+    // cadence so the two can't drift out of sync if that cadence changes.
+    private const STALE_AFTER_DRAIN_CYCLES = 5;
+
     public function __construct(
         private readonly StorageBackendRepository $storageBackendRepository,
         private readonly LogObjectRepository $logObjectRepository,
         private readonly LogEntryRepository $logEntryRepository,
         private readonly SpoolProvider $spoolProvider,
         private readonly Connection $connection,
-        private readonly int $staleSpoolBacklogSeconds,
+        private readonly int $spoolDrainIntervalSeconds,
     ) {
     }
 
@@ -48,11 +54,12 @@ class HealthCheckService
         $spoolObjects = $this->logObjectRepository->findBy(['storageBackend' => $spool], ['createdAt' => 'ASC']);
         $oldestSpoolObject = $spoolObjects[0] ?? null;
 
-        // The spool drains every minute under normal operation, so a
-        // handful of objects sitting there briefly is expected, not an
-        // issue — only flag it once the oldest one has outlived that by a
-        // comfortable margin.
-        $staleCutoff = (new \DateTimeImmutable())->modify(sprintf('-%d seconds', $this->staleSpoolBacklogSeconds));
+        // The spool drains on a regular cadence under normal operation, so
+        // a handful of objects sitting there briefly is expected, not an
+        // issue — only flag it once the oldest one has outlived several
+        // drain cycles' worth of time.
+        $staleAfterSeconds = $this->spoolDrainIntervalSeconds * self::STALE_AFTER_DRAIN_CYCLES;
+        $staleCutoff = (new \DateTimeImmutable())->modify(sprintf('-%d seconds', $staleAfterSeconds));
         $hasStaleSpoolBacklog = $oldestSpoolObject !== null && $oldestSpoolObject->getCreatedAt() < $staleCutoff;
 
         $catalogErrors = $this->logObjectRepository->findBy(['status' => 'error']);
