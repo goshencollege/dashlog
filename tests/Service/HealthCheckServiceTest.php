@@ -2,6 +2,7 @@
 
 namespace App\Tests\Service;
 
+use App\Entity\JobRun;
 use App\Entity\LogEntry;
 use App\Entity\LogObject;
 use App\Entity\StorageBackend;
@@ -30,6 +31,7 @@ class HealthCheckServiceTest extends KernelTestCase
         $this->em->createQuery('DELETE FROM App\Entity\LogEntry')->execute();
         $this->em->createQuery('DELETE FROM App\Entity\LogObject')->execute();
         $this->em->createQuery('DELETE FROM App\Entity\StorageBackend')->execute();
+        $this->em->createQuery('DELETE FROM App\Entity\JobRun')->execute();
 
         $this->spool = self::getContainer()->get(SpoolProvider::class)->getSpool();
     }
@@ -56,7 +58,7 @@ class HealthCheckServiceTest extends KernelTestCase
         self::assertFalse($health['hasActiveBackend']);
     }
 
-    public function testSpoolBacklogIsReportedWithOldestFirst(): void
+    public function testSpoolBacklogIsReportedOldestFirst(): void
     {
         $older = $this->makeSpoolObject('web-01', 'staged');
         $newer = $this->makeSpoolObject('web-02', 'staged');
@@ -64,8 +66,83 @@ class HealthCheckServiceTest extends KernelTestCase
         $health = $this->healthCheckService->check();
 
         self::assertSame(2, $health['spoolBacklogCount']);
-        self::assertSame($older->getId(), $health['oldestSpoolObject']->getId());
-        self::assertSame($newer->getId(), $health['spoolObjects'][1]->getId());
+        self::assertSame($older->getId(), $health['spoolObjects'][0]['object']->getId());
+        self::assertSame($newer->getId(), $health['spoolObjects'][1]['object']->getId());
+    }
+
+    public function testFreshStagedObjectIsNotFlaggedAsStale(): void
+    {
+        $this->makeSpoolObject('web-01', 'staged');
+
+        $health = $this->healthCheckService->check();
+
+        self::assertSame(1, $health['spoolBacklogCount']);
+        self::assertFalse($health['hasStaleSpoolBacklog']);
+    }
+
+    public function testStagedObjectSittingForSeveralDrainCyclesIsFlaggedAsStale(): void
+    {
+        $object = $this->makeSpoolObject('web-01', 'staged');
+        $this->ageUpdatedAt($object, new \DateTimeImmutable('-1 hour'));
+
+        $health = $this->healthCheckService->check();
+
+        self::assertTrue($health['hasStaleSpoolBacklog']);
+        self::assertSame(1, $health['staleSpoolBacklogCount']);
+    }
+
+    public function testFreshlyOpenedPendingObjectIsIncludedButNotFlaggedAsStale(): void
+    {
+        // makeSpoolObject's windowEnd defaults to "now" — a window that
+        // just opened, same as real ingestion traffic between window
+        // start and close.
+        $this->makeSpoolObject('web-01', 'pending');
+
+        $health = $this->healthCheckService->check();
+
+        self::assertSame(1, $health['spoolBacklogCount']);
+        self::assertFalse($health['hasStaleSpoolBacklog']);
+    }
+
+    public function testPendingObjectPastItsWindowByALongMarginIsFlaggedAsStale(): void
+    {
+        $object = $this->makeSpoolObject('web-01', 'pending');
+        // Its window closed 2 hours ago and nothing ever finalized it —
+        // this is exactly the "listener crashed mid-window" scenario
+        // OrphanedLogObjectFinalizer eventually reclaims.
+        $object->setWindowEnd(new \DateTimeImmutable('-2 hours'));
+        $this->em->flush();
+
+        $health = $this->healthCheckService->check();
+
+        self::assertTrue($health['hasStaleSpoolBacklog']);
+        self::assertSame(1, $health['staleSpoolBacklogCount']);
+    }
+
+    public function testErrorSpoolObjectIsFlaggedAsStaleImmediately(): void
+    {
+        // A drain attempt already failed for this one — no need to wait
+        // out a grace period before surfacing it.
+        $this->makeSpoolObject('web-01', 'error');
+
+        $health = $this->healthCheckService->check();
+
+        self::assertTrue($health['hasStaleSpoolBacklog']);
+        self::assertSame(1, $health['staleSpoolBacklogCount']);
+    }
+
+    /**
+     * Bypasses AuditListener's preUpdate (which would otherwise reset
+     * updatedAt back to "now" on any ORM-tracked change) to simulate an
+     * object that's genuinely been sitting untouched since $at.
+     */
+    private function ageUpdatedAt(LogObject $object, \DateTimeImmutable $at): void
+    {
+        $this->connection->executeStatement(
+            'UPDATE log_object SET updated_at = ? WHERE id = ?',
+            [$at->format('Y-m-d H:i:s'), $object->getId()],
+        );
+        $this->em->clear();
     }
 
     public function testCatalogErrorsAreReported(): void
@@ -88,6 +165,46 @@ class HealthCheckServiceTest extends KernelTestCase
 
         self::assertCount(1, $health['catalogErrors']);
         self::assertSame('checksum mismatch', $health['catalogErrors'][0]->getLastError());
+    }
+
+    public function testJobsAreReportedAsNeverRunByDefault(): void
+    {
+        $health = $this->healthCheckService->check();
+
+        self::assertCount(4, $health['jobs']);
+        foreach ($health['jobs'] as $job) {
+            self::assertSame('never_run', $job['status']);
+            self::assertNull($job['lastRunAt']);
+        }
+        self::assertFalse($health['hasFailedJobs']);
+    }
+
+    public function testJobsReflectTheirMostRecentRecordedRun(): void
+    {
+        $successAt = new \DateTimeImmutable('-5 minutes');
+        $success = new JobRun('spool_drain');
+        $success->setLastRunAt($successAt);
+        $success->setStatus('success');
+        $this->em->persist($success);
+
+        $failed = new JobRun('tiering');
+        $failed->setLastRunAt(new \DateTimeImmutable('-10 minutes'));
+        $failed->setStatus('error');
+        $failed->setLastError('storage backend unreachable');
+        $this->em->persist($failed);
+        $this->em->flush();
+
+        $health = $this->healthCheckService->check();
+
+        self::assertTrue($health['hasFailedJobs']);
+        $byName = [];
+        foreach ($health['jobs'] as $job) {
+            $byName[$job['name']] = $job;
+        }
+        self::assertSame('success', $byName['Spool Drain']['status']);
+        self::assertEquals($successAt, $byName['Spool Drain']['lastRunAt']);
+        self::assertSame('error', $byName['Tiering Sweep']['status']);
+        self::assertSame('storage backend unreachable', $byName['Tiering Sweep']['lastError']);
     }
 
     public function testFailedMessageCountIsReported(): void

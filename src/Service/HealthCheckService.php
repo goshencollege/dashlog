@@ -3,6 +3,7 @@
 namespace App\Service;
 
 use App\Entity\LogObject;
+use App\Repository\JobRunRepository;
 use App\Repository\LogEntryRepository;
 use App\Repository\LogObjectRepository;
 use App\Repository\StorageBackendRepository;
@@ -16,12 +17,33 @@ use Doctrine\DBAL\Connection;
  */
 class HealthCheckService
 {
+    // How many drain cycles' worth of delay to tolerate before a staged/
+    // error spool object counts as stale, rather than a fixed number of
+    // seconds — ties the health page's grace period to SpoolDrainSchedule's
+    // actual cadence so the two can't drift out of sync if that cadence
+    // changes.
+    private const STALE_AFTER_DRAIN_CYCLES = 5;
+
+    // Every scheduled job, keyed by the name JobRunTracker records it
+    // under, so a job that has literally never run still shows up here
+    // (rather than just being silently absent from the list) and a typo
+    // in a job name doesn't quietly stop it from being tracked.
+    private const JOBS = [
+        'tiering' => 'Tiering Sweep',
+        'spool_drain' => 'Spool Drain',
+        'log_entry_prune' => 'Log Entry Prune',
+        'orphaned_log_object_finalize' => 'Orphaned Object Finalize',
+    ];
+
     public function __construct(
         private readonly StorageBackendRepository $storageBackendRepository,
         private readonly LogObjectRepository $logObjectRepository,
         private readonly LogEntryRepository $logEntryRepository,
+        private readonly JobRunRepository $jobRunRepository,
         private readonly SpoolProvider $spoolProvider,
         private readonly Connection $connection,
+        private readonly int $spoolDrainIntervalSeconds,
+        private readonly int $pendingStaleSeconds,
     ) {
     }
 
@@ -29,12 +51,15 @@ class HealthCheckService
      * @return array{
      *     backends: array,
      *     hasActiveBackend: bool,
-     *     spoolObjects: LogObject[],
+     *     spoolObjects: array<array{object: LogObject, since: \DateTimeImmutable, isStale: bool}>,
      *     spoolBacklogCount: int,
-     *     oldestSpoolObject: LogObject|null,
+     *     staleSpoolBacklogCount: int,
+     *     hasStaleSpoolBacklog: bool,
      *     catalogErrors: LogObject[],
      *     lastLogEntry: \App\Entity\LogEntry|null,
      *     failedMessageCount: int,
+     *     jobs: array<array{name: string, lastRunAt: \DateTimeImmutable|null, status: string, lastError: string|null}>,
+     *     hasFailedJobs: bool,
      * }
      */
     public function check(): array
@@ -42,8 +67,16 @@ class HealthCheckService
         $backends = $this->storageBackendRepository->findAllExcludingSpool();
         $hasActiveBackend = $this->storageBackendRepository->findActiveOrderedByTier() !== [];
 
+        // Every object currently on the spool, regardless of status —
+        // including 'pending' ones, so a real incident (e.g. a crashed
+        // listener leaving windows stuck open) is still visible here
+        // rather than hidden from the list entirely.
         $spool = $this->spoolProvider->getSpool();
         $spoolObjects = $this->logObjectRepository->findBy(['storageBackend' => $spool], ['createdAt' => 'ASC']);
+
+        $now = new \DateTimeImmutable();
+        $spoolObjectRows = array_map(fn (LogObject $object) => $this->describeSpoolObject($object, $now), $spoolObjects);
+        $staleSpoolBacklogCount = count(array_filter($spoolObjectRows, static fn (array $row) => $row['isStale']));
 
         $catalogErrors = $this->logObjectRepository->findBy(['status' => 'error']);
 
@@ -54,15 +87,65 @@ class HealthCheckService
             ['queue' => 'failed'],
         );
 
+        $jobRunsByName = $this->jobRunRepository->findAllIndexedByJobName();
+        $jobs = [];
+        foreach (self::JOBS as $jobName => $label) {
+            $jobRun = $jobRunsByName[$jobName] ?? null;
+            $jobs[] = [
+                'name' => $label,
+                'lastRunAt' => $jobRun?->getLastRunAt(),
+                'status' => $jobRun !== null ? $jobRun->getStatus() : 'never_run',
+                'lastError' => $jobRun?->getLastError(),
+            ];
+        }
+
         return [
             'backends' => $backends,
             'hasActiveBackend' => $hasActiveBackend,
-            'spoolObjects' => $spoolObjects,
-            'spoolBacklogCount' => count($spoolObjects),
-            'oldestSpoolObject' => $spoolObjects[0] ?? null,
+            'spoolObjects' => $spoolObjectRows,
+            'spoolBacklogCount' => count($spoolObjectRows),
+            'staleSpoolBacklogCount' => $staleSpoolBacklogCount,
+            'hasStaleSpoolBacklog' => $staleSpoolBacklogCount > 0,
             'catalogErrors' => $catalogErrors,
             'lastLogEntry' => $lastLogEntry,
             'failedMessageCount' => $failedMessageCount,
+            'jobs' => $jobs,
+            'hasFailedJobs' => in_array('error', array_column($jobs, 'status'), true),
+        ];
+    }
+
+    /**
+     * @return array{object: LogObject, since: \DateTimeImmutable, isStale: bool}
+     */
+    private function describeSpoolObject(LogObject $object, \DateTimeImmutable $now): array
+    {
+        // An 'error' object means a drain attempt already failed — that's
+        // worth flagging immediately, not just once it's been sitting
+        // around for a while.
+        if ($object->getStatus() === 'error') {
+            return ['object' => $object, 'since' => $object->getUpdatedAt(), 'isStale' => true];
+        }
+
+        // 'pending' objects (window still open, nothing written yet — see
+        // SpoolDrainService's docblock) are expected to sit here for up to
+        // a full batch window; only worth flagging once they've outlived
+        // that window by the same margin OrphanedLogObjectFinalizer uses to
+        // treat one as orphaned, since that's this app's one existing
+        // definition of "a pending object has been open too long."
+        // 'staged' objects should already be moving on a regular drain
+        // cadence, so "since" is when it last changed state.
+        if ($object->getStatus() === 'pending') {
+            $since = $object->getWindowEnd();
+            $cutoff = $now->modify(sprintf('-%d seconds', $this->pendingStaleSeconds));
+        } else {
+            $since = $object->getUpdatedAt();
+            $cutoff = $now->modify(sprintf('-%d seconds', $this->spoolDrainIntervalSeconds * self::STALE_AFTER_DRAIN_CYCLES));
+        }
+
+        return [
+            'object' => $object,
+            'since' => $since,
+            'isStale' => $since < $cutoff,
         ];
     }
 }

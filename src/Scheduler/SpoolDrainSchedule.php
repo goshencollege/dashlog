@@ -14,6 +14,7 @@ class SpoolDrainSchedule implements ScheduleProviderInterface
 {
     public function __construct(
         private readonly CacheInterface $cache,
+        private readonly int $intervalSeconds,
     ) {
     }
 
@@ -22,6 +23,6 @@ class SpoolDrainSchedule implements ScheduleProviderInterface
         return (new Schedule())
             ->stateful($this->cache)
             ->processOnlyLastMissedRun(true)
-            ->add(RecurringMessage::every('1 minute', new RunSpoolDrainMessage()));
+            ->add(RecurringMessage::every(sprintf('%d seconds', $this->intervalSeconds), new RunSpoolDrainMessage()));
     }
 }

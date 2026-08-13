@@ -38,20 +38,19 @@ use Psr\Log\LoggerInterface;
  */
 class OrphanedLogObjectFinalizer
 {
-    private const STALE_AFTER_SECONDS = 3600;
-
     public function __construct(
         private readonly LogObjectRepository $logObjectRepository,
         private readonly LogEntryRepository $logEntryRepository,
         private readonly LogBatchWriter $batchWriter,
         private readonly StorageService $storageService,
         private readonly LoggerInterface $logger,
+        private readonly int $pendingStaleSeconds,
     ) {
     }
 
     public function run(\DateTimeImmutable $now): int
     {
-        $cutoff = $now->modify(sprintf('-%d seconds', self::STALE_AFTER_SECONDS));
+        $cutoff = $now->modify(sprintf('-%d seconds', $this->pendingStaleSeconds));
         $candidates = [
             ...$this->logObjectRepository->findStalePending($cutoff),
             ...array_filter($this->logObjectRepository->findBy(['status' => 'error']), $this->hasUnreadableContent(...)),
