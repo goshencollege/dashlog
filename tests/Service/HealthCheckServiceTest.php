@@ -81,12 +81,39 @@ class HealthCheckServiceTest extends KernelTestCase
     public function testOldSpoolBacklogIsFlaggedAsStale(): void
     {
         $object = $this->makeSpoolObject('web-01', 'staged');
-        $object->setCreatedAt(new \DateTimeImmutable('-1 hour'));
-        $this->em->flush();
+        $this->ageUpdatedAt($object, new \DateTimeImmutable('-1 hour'));
 
         $health = $this->healthCheckService->check();
 
         self::assertTrue($health['hasStaleSpoolBacklog']);
+    }
+
+    public function testPendingSpoolObjectsAreExcludedFromTheBacklog(): void
+    {
+        $pending = $this->makeSpoolObject('web-01', 'pending');
+        // Its window opened well over an hour ago — if pending objects were
+        // counted, this alone would already trip the staleness check.
+        $this->ageUpdatedAt($pending, new \DateTimeImmutable('-1 hour'));
+
+        $health = $this->healthCheckService->check();
+
+        self::assertSame(0, $health['spoolBacklogCount']);
+        self::assertNull($health['oldestSpoolObject']);
+        self::assertFalse($health['hasStaleSpoolBacklog']);
+    }
+
+    /**
+     * Bypasses AuditListener's preUpdate (which would otherwise reset
+     * updatedAt back to "now" on any ORM-tracked change) to simulate an
+     * object that's genuinely been sitting untouched since $at.
+     */
+    private function ageUpdatedAt(LogObject $object, \DateTimeImmutable $at): void
+    {
+        $this->connection->executeStatement(
+            'UPDATE log_object SET updated_at = ? WHERE id = ?',
+            [$at->format('Y-m-d H:i:s'), $object->getId()],
+        );
+        $this->em->clear();
     }
 
     public function testCatalogErrorsAreReported(): void

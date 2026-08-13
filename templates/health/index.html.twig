@@ -102,13 +102,13 @@
                         <div class="alert alert-warning">
                             <i class="bi bi-exclamation-triangle-fill me-1"></i>
                             {{ health.spoolBacklogCount }} object(s) currently on the spool, waiting to move to real storage.
-                            Oldest has been there since {{ health.oldestSpoolObject.createdAt|date('Y-m-d H:i') }} — longer than expected.
+                            Oldest has been waiting since {{ health.oldestSpoolObject.updatedAt|date('Y-m-d H:i') }} — longer than expected.
                         </div>
                     {% else %}
                         <div class="alert alert-info">
                             <i class="bi bi-info-circle-fill me-1"></i>
                             {{ health.spoolBacklogCount }} object(s) currently on the spool, waiting to move to real storage.
-                            This is normal — the spool drains automatically every minute.
+                            This is normal — the spool drains automatically on a regular schedule.
                         </div>
                     {% endif %}
                     <div class="table-responsive scrollable-table-body">
@@ -131,7 +131,7 @@
                                             <span class="badge bg-secondary-subtle text-secondary-emphasis border">{{ object.status }}</span>
                                         {% endif %}
                                     </td>
-                                    <td class="text-muted small">{{ object.createdAt|date('Y-m-d H:i') }}</td>
+                                    <td class="text-muted small">{{ object.updatedAt|date('Y-m-d H:i') }}</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>

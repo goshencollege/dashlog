@@ -51,8 +51,20 @@ class HealthCheckService
         $hasActiveBackend = $this->storageBackendRepository->findActiveOrderedByTier() !== [];
 
         $spool = $this->spoolProvider->getSpool();
-        $spoolObjects = $this->logObjectRepository->findBy(['storageBackend' => $spool], ['createdAt' => 'ASC']);
-        $oldestSpoolObject = $spoolObjects[0] ?? null;
+
+        // 'pending' objects aren't part of the drain backlog at all —
+        // SpoolDrainService never touches them either (see its docblock):
+        // their batch window is still open and there are no bytes to move
+        // yet. A LogObject's createdAt is set when its window *opens*, so
+        // one can already be up to a full batch window old by the time it
+        // closes and the object even becomes eligible to drain — using
+        // createdAt for staleness here would flag perfectly healthy
+        // objects well before the drain ever gets a chance at them.
+        // updatedAt instead reflects when it last changed state (e.g. the
+        // pending → staged transition), which is what "how long has this
+        // actually been waiting" needs to measure.
+        $spoolObjects = $this->logObjectRepository->findMovableOnBackend($spool);
+        $oldestSpoolObject = $this->oldestByUpdatedAt($spoolObjects);
 
         // The spool drains on a regular cadence under normal operation, so
         // a handful of objects sitting there briefly is expected, not an
@@ -60,7 +72,7 @@ class HealthCheckService
         // drain cycles' worth of time.
         $staleAfterSeconds = $this->spoolDrainIntervalSeconds * self::STALE_AFTER_DRAIN_CYCLES;
         $staleCutoff = (new \DateTimeImmutable())->modify(sprintf('-%d seconds', $staleAfterSeconds));
-        $hasStaleSpoolBacklog = $oldestSpoolObject !== null && $oldestSpoolObject->getCreatedAt() < $staleCutoff;
+        $hasStaleSpoolBacklog = $oldestSpoolObject !== null && $oldestSpoolObject->getUpdatedAt() < $staleCutoff;
 
         $catalogErrors = $this->logObjectRepository->findBy(['status' => 'error']);
 
@@ -82,5 +94,19 @@ class HealthCheckService
             'lastLogEntry' => $lastLogEntry,
             'failedMessageCount' => $failedMessageCount,
         ];
+    }
+
+    /**
+     * @param LogObject[] $spoolObjects
+     */
+    private function oldestByUpdatedAt(array $spoolObjects): ?LogObject
+    {
+        if ($spoolObjects === []) {
+            return null;
+        }
+
+        usort($spoolObjects, static fn (LogObject $a, LogObject $b) => $a->getUpdatedAt() <=> $b->getUpdatedAt());
+
+        return $spoolObjects[0];
     }
 }
