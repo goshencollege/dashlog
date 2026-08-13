@@ -11,7 +11,7 @@
 </style>
 {% endblock %}
 
-{% set hasIssues = not health.hasActiveBackend or health.spoolBacklogCount > 0 or health.catalogErrors is not empty or health.failedMessageCount > 0 %}
+{% set hasIssues = not health.hasActiveBackend or health.hasStaleSpoolBacklog or health.catalogErrors is not empty or health.failedMessageCount > 0 %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -98,11 +98,19 @@
                 {% if health.spoolBacklogCount == 0 %}
                     <p class="text-success mb-0"><i class="bi bi-check-circle me-1"></i>Nothing waiting to be drained.</p>
                 {% else %}
-                    <div class="alert alert-warning">
-                        <i class="bi bi-exclamation-triangle-fill me-1"></i>
-                        {{ health.spoolBacklogCount }} object(s) currently on the spool, waiting to move to real storage.
-                        Oldest has been there since {{ health.oldestSpoolObject.createdAt|date('Y-m-d H:i') }}.
-                    </div>
+                    {% if health.hasStaleSpoolBacklog %}
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                            {{ health.spoolBacklogCount }} object(s) currently on the spool, waiting to move to real storage.
+                            Oldest has been there since {{ health.oldestSpoolObject.createdAt|date('Y-m-d H:i') }} — longer than expected.
+                        </div>
+                    {% else %}
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle-fill me-1"></i>
+                            {{ health.spoolBacklogCount }} object(s) currently on the spool, waiting to move to real storage.
+                            This is normal — the spool drains automatically every minute.
+                        </div>
+                    {% endif %}
                     <div class="table-responsive scrollable-table-body">
                         <table class="table table-sm mb-0">
                             <thead>
