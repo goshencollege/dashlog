@@ -40,6 +40,7 @@ services:
     App\Command\SyslogListenCommand:
         arguments:
             $visibilityFlushSeconds: '%env(int:default:default_log_visibility_flush_seconds:LOG_VISIBILITY_FLUSH_SECONDS)%'
+            $debugDataHolder: '@doctrine.debug_data_holder'
 
     App\Service\LogEntryPruneService:
         arguments:

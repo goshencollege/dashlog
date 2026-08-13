@@ -11,6 +11,7 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Doctrine\Bundle\DoctrineBundle\Middleware\BacktraceDebugDataHolder;
 
 #[AsCommand(
     name: 'app:syslog:listen',
@@ -23,6 +24,7 @@ class SyslogListenCommand extends Command
         private readonly LogIngestor $ingestor,
         private readonly LoggerInterface $logger,
         private readonly int $visibilityFlushSeconds,
+        private readonly BacktraceDebugDataHolder $debugDataHolder,
     ) {
         parent::__construct();
     }
@@ -107,6 +109,18 @@ class SyslogListenCommand extends Command
                 } catch (\Throwable $e) {
                     $this->logger->error('Unexpected error while flushing log entries for visibility.', ['exception' => $e]);
                 }
+
+                // Doctrine's debug/profiler middleware logs every query plus
+                // a full backtrace and never clears it on its own — fine for
+                // one HTTP request, fatal for a process that runs forever
+                // and executes thousands of queries. This is what was
+                // exhausting the listener's memory limit every 40-90
+                // minutes. (Symfony's own services_resetter would also
+                // reset here, but that clears the whole EntityManager's
+                // identity map too, which would detach the LogObject
+                // references LogIngestor's buffer holds across cycles —
+                // reset just this one leaking service instead.)
+                $this->debugDataHolder->reset();
                 $lastVisibilityFlush = $now;
             }
 
