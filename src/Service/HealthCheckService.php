@@ -3,6 +3,7 @@
 namespace App\Service;
 
 use App\Entity\LogObject;
+use App\Repository\JobRunRepository;
 use App\Repository\LogEntryRepository;
 use App\Repository\LogObjectRepository;
 use App\Repository\StorageBackendRepository;
@@ -23,10 +24,22 @@ class HealthCheckService
     // changes.
     private const STALE_AFTER_DRAIN_CYCLES = 5;
 
+    // Every scheduled job, keyed by the name JobRunTracker records it
+    // under, so a job that has literally never run still shows up here
+    // (rather than just being silently absent from the list) and a typo
+    // in a job name doesn't quietly stop it from being tracked.
+    private const JOBS = [
+        'tiering' => 'Tiering Sweep',
+        'spool_drain' => 'Spool Drain',
+        'log_entry_prune' => 'Log Entry Prune',
+        'orphaned_log_object_finalize' => 'Orphaned Object Finalize',
+    ];
+
     public function __construct(
         private readonly StorageBackendRepository $storageBackendRepository,
         private readonly LogObjectRepository $logObjectRepository,
         private readonly LogEntryRepository $logEntryRepository,
+        private readonly JobRunRepository $jobRunRepository,
         private readonly SpoolProvider $spoolProvider,
         private readonly Connection $connection,
         private readonly int $spoolDrainIntervalSeconds,
@@ -45,6 +58,8 @@ class HealthCheckService
      *     catalogErrors: LogObject[],
      *     lastLogEntry: \App\Entity\LogEntry|null,
      *     failedMessageCount: int,
+     *     jobs: array<array{name: string, lastRunAt: \DateTimeImmutable|null, status: string, lastError: string|null}>,
+     *     hasFailedJobs: bool,
      * }
      */
     public function check(): array
@@ -72,6 +87,18 @@ class HealthCheckService
             ['queue' => 'failed'],
         );
 
+        $jobRunsByName = $this->jobRunRepository->findAllIndexedByJobName();
+        $jobs = [];
+        foreach (self::JOBS as $jobName => $label) {
+            $jobRun = $jobRunsByName[$jobName] ?? null;
+            $jobs[] = [
+                'name' => $label,
+                'lastRunAt' => $jobRun?->getLastRunAt(),
+                'status' => $jobRun !== null ? $jobRun->getStatus() : 'never_run',
+                'lastError' => $jobRun?->getLastError(),
+            ];
+        }
+
         return [
             'backends' => $backends,
             'hasActiveBackend' => $hasActiveBackend,
@@ -82,6 +109,8 @@ class HealthCheckService
             'catalogErrors' => $catalogErrors,
             'lastLogEntry' => $lastLogEntry,
             'failedMessageCount' => $failedMessageCount,
+            'jobs' => $jobs,
+            'hasFailedJobs' => in_array('error', array_column($jobs, 'status'), true),
         ];
     }
 

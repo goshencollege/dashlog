@@ -11,7 +11,7 @@
 </style>
 {% endblock %}
 
-{% set hasIssues = not health.hasActiveBackend or health.hasStaleSpoolBacklog or health.catalogErrors is not empty or health.failedMessageCount > 0 %}
+{% set hasIssues = not health.hasActiveBackend or health.hasStaleSpoolBacklog or health.catalogErrors is not empty or health.failedMessageCount > 0 or health.hasFailedJobs %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -140,6 +140,65 @@
 
     <div class="col-12 col-lg-6">
         <div class="card h-100">
+            <div class="card-header"><strong>Ingestion &amp; Jobs</strong></div>
+            <div class="card-body">
+                <dl class="row">
+                    <dt class="col-6">Last log received</dt>
+                    <dd class="col-6">
+                        {% if health.lastLogEntry is null %}
+                            <span class="text-muted">No logs received yet</span>
+                        {% else %}
+                            {{ health.lastLogEntry.createdAt|date('Y-m-d H:i:s') }}
+                        {% endif %}
+                    </dd>
+
+                    <dt class="col-6">Failed async jobs</dt>
+                    <dd class="col-6">
+                        {% if health.failedMessageCount == 0 %}
+                            <span class="text-success">0</span>
+                        {% else %}
+                            <span class="text-danger fw-semibold">{{ health.failedMessageCount }}</span>
+                        {% endif %}
+                    </dd>
+                </dl>
+                <table class="table table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th>Scheduled Job</th>
+                            <th>Last Run</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for job in health.jobs %}
+                        <tr>
+                            <td>{{ job.name }}</td>
+                            <td class="text-muted small">
+                                {% if job.lastRunAt is null %}
+                                    &mdash;
+                                {% else %}
+                                    {{ job.lastRunAt|date('Y-m-d H:i:s') }}
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if job.status == 'success' %}
+                                    <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle">OK</span>
+                                {% elseif job.status == 'error' %}
+                                    <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle" title="{{ job.lastError }}">Error</span>
+                                {% else %}
+                                    <span class="badge bg-secondary-subtle text-secondary-emphasis border">Never run</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-lg-6">
+        <div class="card h-100">
             <div class="card-header"><strong>Catalog Errors</strong></div>
             <div class="card-body">
                 {% if health.catalogErrors is empty %}
@@ -170,33 +229,6 @@
                         </tbody>
                     </table>
                 {% endif %}
-            </div>
-        </div>
-    </div>
-
-    <div class="col-12 col-lg-6">
-        <div class="card h-100">
-            <div class="card-header"><strong>Ingestion &amp; Jobs</strong></div>
-            <div class="card-body">
-                <dl class="row mb-0">
-                    <dt class="col-6">Last log received</dt>
-                    <dd class="col-6">
-                        {% if health.lastLogEntry is null %}
-                            <span class="text-muted">No logs received yet</span>
-                        {% else %}
-                            {{ health.lastLogEntry.createdAt|date('Y-m-d H:i:s') }}
-                        {% endif %}
-                    </dd>
-
-                    <dt class="col-6">Failed async jobs</dt>
-                    <dd class="col-6">
-                        {% if health.failedMessageCount == 0 %}
-                            <span class="text-success">0</span>
-                        {% else %}
-                            <span class="text-danger fw-semibold">{{ health.failedMessageCount }}</span>
-                        {% endif %}
-                    </dd>
-                </dl>
             </div>
         </div>
     </div>

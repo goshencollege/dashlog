@@ -2,6 +2,7 @@
 
 namespace App\Tests\Service;
 
+use App\Entity\JobRun;
 use App\Entity\LogEntry;
 use App\Entity\LogObject;
 use App\Entity\StorageBackend;
@@ -30,6 +31,7 @@ class HealthCheckServiceTest extends KernelTestCase
         $this->em->createQuery('DELETE FROM App\Entity\LogEntry')->execute();
         $this->em->createQuery('DELETE FROM App\Entity\LogObject')->execute();
         $this->em->createQuery('DELETE FROM App\Entity\StorageBackend')->execute();
+        $this->em->createQuery('DELETE FROM App\Entity\JobRun')->execute();
 
         $this->spool = self::getContainer()->get(SpoolProvider::class)->getSpool();
     }
@@ -163,6 +165,46 @@ class HealthCheckServiceTest extends KernelTestCase
 
         self::assertCount(1, $health['catalogErrors']);
         self::assertSame('checksum mismatch', $health['catalogErrors'][0]->getLastError());
+    }
+
+    public function testJobsAreReportedAsNeverRunByDefault(): void
+    {
+        $health = $this->healthCheckService->check();
+
+        self::assertCount(4, $health['jobs']);
+        foreach ($health['jobs'] as $job) {
+            self::assertSame('never_run', $job['status']);
+            self::assertNull($job['lastRunAt']);
+        }
+        self::assertFalse($health['hasFailedJobs']);
+    }
+
+    public function testJobsReflectTheirMostRecentRecordedRun(): void
+    {
+        $successAt = new \DateTimeImmutable('-5 minutes');
+        $success = new JobRun('spool_drain');
+        $success->setLastRunAt($successAt);
+        $success->setStatus('success');
+        $this->em->persist($success);
+
+        $failed = new JobRun('tiering');
+        $failed->setLastRunAt(new \DateTimeImmutable('-10 minutes'));
+        $failed->setStatus('error');
+        $failed->setLastError('storage backend unreachable');
+        $this->em->persist($failed);
+        $this->em->flush();
+
+        $health = $this->healthCheckService->check();
+
+        self::assertTrue($health['hasFailedJobs']);
+        $byName = [];
+        foreach ($health['jobs'] as $job) {
+            $byName[$job['name']] = $job;
+        }
+        self::assertSame('success', $byName['Spool Drain']['status']);
+        self::assertEquals($successAt, $byName['Spool Drain']['lastRunAt']);
+        self::assertSame('error', $byName['Tiering Sweep']['status']);
+        self::assertSame('storage backend unreachable', $byName['Tiering Sweep']['lastError']);
     }
 
     public function testFailedMessageCountIsReported(): void
